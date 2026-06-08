@@ -1,0 +1,11 @@
+# Android NDK cross-compilation linker configuration
+# Used by CI for Android .so builds
+
+[target.aarch64-linux-android]
+linker = "/usr/local/lib/android/sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+
+[target.armv7-linux-androideabi]
+linker = "/usr/local/lib/android/sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang"
+
+[target.x86_64-linux-android]
+linker = "/usr/local/lib/android/sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
