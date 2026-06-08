@@ -1,0 +1,62 @@
+# ShadowGate - BLE 跨端自动锁屏/解锁系统
+# 全局配置文件 (Rust 使用 toml crate 解析, Android 端对应 xml/kt 解析)
+
+[ble]
+service_uuid = "0000shadow-0000-1000-8000-00805f9b34fb"
+characteristic_challenge_uuid = "0000chall-0000-1000-8000-00805f9b34fb"
+characteristic_response_uuid = "0000resp-0000-1000-8000-00805f9b34fb"
+characteristic_device_id_uuid = "0000devid-0000-1000-8000-00805f9b34fb"
+
+[rssi]
+# RSSI 解锁阈值: 信号强度高于此值触发解锁 (-60dBm 表示设备非常近)
+unlock_threshold_dbm = -60
+# RSSI 锁定阈值: 信号强度低于此值持续一段时间后触发锁定
+lock_threshold_dbm = -80
+# 迟滞样本数: 需要连续 N 次采样满足条件才触发动作
+hysteresis_samples = 3
+# 锁定确认时间 (毫秒): RSSI 持续低于 lock_threshold 达此时长后触发锁定
+lock_confirmation_ms = 5000
+# RSSI 采样间隔 (毫秒)
+rssi_sample_interval_ms = 500
+
+[challenge]
+# 质询超时 (毫秒): 防范中继攻击的物理时间限制
+timeout_ms = 1500
+# 质询随机数长度 (字节)
+challenge_size = 32
+# 签名响应最大长度 (字节)
+response_max_size = 64
+
+[scanning]
+# BLE 扫描间隔 (毫秒)
+scan_interval_ms = 1000
+# 扫描窗口时长 (毫秒)
+scan_window_ms = 500
+# 扫描超时 (秒): 0 表示持续扫描
+scan_timeout_secs = 0
+
+[crypto]
+# 密钥类型: "ed25519"
+key_type = "ed25519"
+# 密钥轮换间隔 (天): 0 表示不自动轮换
+key_rotation_days = 0
+
+[android]
+# 广播间隔 (毫秒)
+advertise_interval_ms = 1000
+# 发射功率: "LOW" | "MEDIUM" | "HIGH"
+tx_power = "MEDIUM"
+# 前台服务通知渠道名称
+foreground_channel_name = "ShadowGate 近场守护"
+# Xposed 模块启用 (需要 KernelSU/Xposed 环境)
+xposed_enabled = false
+
+[windows]
+# 锁屏方式: "win32_api" | "credential_provider"
+lock_method = "win32_api"
+# 解锁方式: "simulate_keystroke" | "credential_provider_api"
+unlock_method = "simulate_keystroke"
+# 唤醒后蓝牙适配器重置等待时间 (毫秒)
+bt_reset_after_wake_ms = 3000
+# 日志级别
+log_level = "info"

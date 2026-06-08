@@ -1,0 +1,37 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Android
+android-app/**/build/
+android-app/**/.gradle/
+android-app/**/local.properties
+android-app/**/*.apk
+android-app/**/*.aab
+*.iml
+.gradle/
+
+# Tauri
+tauri-ui/node_modules/
+tauri-ui/src-tauri/target/
+tauri-ui/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Hermes
+.hermes/
+
+# Environment
+.env
+*.log

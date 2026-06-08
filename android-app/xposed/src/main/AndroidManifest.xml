@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.shadowgate.xposed">
+
+    <application
+        android:allowBackup="false"
+        android:label="ShadowGate Xposed">
+
+        <!-- Xposed 模块声明 -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="ShadowGate BLE 保活模块 — 绕过 Doze 模式限制" />
+        <meta-data
+            android:name="xposedminversion"
+            android:value="93" />
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/xposed_scope" />
+
+    </application>
+</manifest>

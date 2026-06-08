@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- BLE 权限 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+
+    <!-- 位置权限 (Android 12 以下 BLE 扫描需要) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <!-- 前台服务 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 电源管理 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- 相机 (QR 码扫描) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- BLE 硬件特性声明 -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+
+    <application
+        android:name=".ShadowGateApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="ShadowGate"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ShadowGate">
+
+        <!-- 主 Activity (配置 UI) -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.ShadowGate">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- BLE 前台服务 -->
+        <service
+            android:name=".service.ShadowGateService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Root 特权守护进程 -->
+        <service
+            android:name=".rootdaemon.RootDaemonService"
+            android:exported="false"
+            android:process=":rootdaemon"
+            android:foregroundServiceType="dataSync" />
+
+    </application>
+</manifest>

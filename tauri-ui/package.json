@@ -1,0 +1,17 @@
+{
+  "name": "shadowgate-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "preview": "tauri preview"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.2"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  }
+}

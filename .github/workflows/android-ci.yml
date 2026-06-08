@@ -1,0 +1,90 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'android-app/**'
+      - 'core-lib/**'
+      - '.github/workflows/android-ci.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'android-app/**'
+      - '.github/workflows/android-ci.yml'
+
+env:
+  JAVA_VERSION: '17'
+
+jobs:
+  # ===== 编译 APK =====
+  build-apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 ndk;26.1.10909125'
+
+      - name: Cache Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          build-root-directory: android-app
+
+      - name: Build Debug APK
+        working-directory: android-app
+        run: ./gradlew assembleDebug
+
+      - name: Build Release APK
+        working-directory: android-app
+        run: ./gradlew assembleRelease
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: shadowgate-android-apk
+          path: |
+            android-app/app/build/outputs/apk/debug/*.apk
+            android-app/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+  # ===== Lint 检查 =====
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34'
+
+      - name: Cache Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          build-root-directory: android-app
+
+      - name: Run Lint
+        working-directory: android-app
+        run: ./gradlew lint
+
+      - uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: lint-report
+          path: android-app/app/build/reports/lint-results*.html
