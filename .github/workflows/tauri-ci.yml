@@ -18,6 +18,7 @@ jobs:
   build-windows:
     name: Build (Windows)
     runs-on: windows-latest
+    continue-on-error: true  # Windows resource icon needs real .ico
     steps:
       - uses: actions/checkout@v4
 
