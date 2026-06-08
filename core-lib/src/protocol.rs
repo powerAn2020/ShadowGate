@@ -138,7 +138,10 @@ pub fn deserialize<T: for<'de> Deserialize<'de>>(data: &[u8]) -> CoreResult<T> {
 }
 
 /// 创建配对手请求的 payload 并序列化
-pub fn create_provisioning_request(public_key: &PublicKey, device_name: &str) -> CoreResult<Vec<u8>> {
+pub fn create_provisioning_request(
+    public_key: &PublicKey,
+    device_name: &str,
+) -> CoreResult<Vec<u8>> {
     let req = ProvisioningRequest {
         public_key: public_key.bytes,
         device_name: device_name.to_string(),
@@ -201,7 +204,11 @@ mod tests {
         let hash = [0u8; 8];
         let data = create_device_info(&hash, 0).unwrap();
         // DeviceInfo 应 < 20 字节以放入 BLE Advertise Data
-        assert!(data.len() <= 20, "DeviceInfo too large: {} bytes", data.len());
+        assert!(
+            data.len() <= 20,
+            "DeviceInfo too large: {} bytes",
+            data.len()
+        );
     }
 
     #[test]

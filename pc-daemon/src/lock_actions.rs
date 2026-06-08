@@ -56,12 +56,12 @@ pub fn unlock_workstation() -> Result<(), String> {
 
 /// 发送 Secure Attention Sequence (Ctrl+Alt+Del)
 fn simulate_sas() -> Result<(), String> {
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::System::SystemServices::GENERIC_ALL;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-        KEYEVENTF_KEYUP, VK_DELETE, VK_LCONTROL, VK_LMENU,
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_DELETE,
+        VK_LCONTROL, VK_LMENU,
     };
-    use windows::Win32::Foundation::HWND;
 
     // 构造 Ctrl+Alt+Del 按键序列
     let inputs = [

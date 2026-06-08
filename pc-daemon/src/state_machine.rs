@@ -110,10 +110,7 @@ impl StateMachine {
 
     /// 状态转换
     async fn transition_to(&mut self, new_state: SystemState) -> Result<()> {
-        info!(
-            "State transition: {} -> {}",
-            self.state, new_state
-        );
+        info!("State transition: {} -> {}", self.state, new_state);
         self.state = new_state;
 
         match new_state {
@@ -135,7 +132,10 @@ impl StateMachine {
     async fn run_scanning(&mut self) -> Result<()> {
         info!("Entering SCANNING state...");
 
-        let service_uuid: Uuid = self.config.ble.service_uuid
+        let service_uuid: Uuid = self
+            .config
+            .ble
+            .service_uuid
             .parse()
             .context("Invalid SERVICE_UUID in config")?;
 
@@ -148,7 +148,9 @@ impl StateMachine {
             .scan(&service_uuid, |device: DiscoveredDevice| {
                 // 在回调中检查设备是否在信任列表中
                 let ctx_guard = futures::executor::block_on(async { ctx.lock().await });
-                let known = ctx_guard.device_store.get_by_hash(&device.device_info.device_hash);
+                let known = ctx_guard
+                    .device_store
+                    .get_by_hash(&device.device_info.device_hash);
                 drop(ctx_guard);
 
                 if known.is_none() {
@@ -166,7 +168,10 @@ impl StateMachine {
                 let sm = unsafe { &mut *self_ref };
                 let filtered_rssi = sm.filter.update(rssi);
 
-                debug!("Known device RSSI: raw={} dBm, filtered={:.1} dBm", rssi, filtered_rssi);
+                debug!(
+                    "Known device RSSI: raw={} dBm, filtered={:.1} dBm",
+                    rssi, filtered_rssi
+                );
 
                 // 迟滞检测
                 let action = sm.hysteresis.update(filtered_rssi);
@@ -226,10 +231,7 @@ impl StateMachine {
         };
 
         // 执行 Challenge-Response 认证
-        let challenge_runner = ChallengeRunner::new(
-            self.config.clone(),
-            self.ctx.clone(),
-        );
+        let challenge_runner = ChallengeRunner::new(self.config.clone(), self.ctx.clone());
 
         match challenge_runner.run(device).await {
             Ok(true) => {
@@ -267,7 +269,10 @@ impl StateMachine {
     async fn run_monitoring(&mut self) -> Result<()> {
         info!("Entering MONITORING state — watching for device departure");
 
-        let service_uuid: Uuid = self.config.ble.service_uuid
+        let service_uuid: Uuid = self
+            .config
+            .ble
+            .service_uuid
             .parse()
             .context("Invalid SERVICE_UUID in config")?;
 

@@ -5,13 +5,15 @@
 
 #[cfg(target_os = "android")]
 mod android_impl {
-    use jni::objects::{JClass, JByteArray, JString};
+    use jni::objects::{JByteArray, JClass, JString};
     use jni::sys::{jboolean, jbyteArray, jstring};
     use jni::JNIEnv;
 
     use crate::crypto::KeyPair;
-    use crate::rssi_filter::{KalmanFilter, MovingAverageFilter, HysteresisDetector, HysteresisAction};
     use crate::protocol;
+    use crate::rssi_filter::{
+        HysteresisAction, HysteresisDetector, KalmanFilter, MovingAverageFilter,
+    };
 
     // ===== 密钥管理 =====
 
@@ -44,9 +46,7 @@ mod android_impl {
         seed: JByteArray,
         message: JByteArray,
     ) -> jbyteArray {
-        let seed_bytes: Vec<u8> = env
-            .convert_byte_array(&seed)
-            .expect("invalid seed array");
+        let seed_bytes: Vec<u8> = env.convert_byte_array(&seed).expect("invalid seed array");
 
         let seed_arr: [u8; 32] = seed_bytes
             .as_slice()
@@ -197,10 +197,7 @@ mod android_impl {
         let sig_arr: [u8; 64] = match sig_bytes.as_slice().try_into() {
             Ok(a) => a,
             Err(_) => {
-                return env
-                    .byte_array_from_slice(&[])
-                    .expect("")
-                    .into_raw();
+                return env.byte_array_from_slice(&[]).expect("").into_raw();
             }
         };
 

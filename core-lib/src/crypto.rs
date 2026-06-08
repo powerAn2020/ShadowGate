@@ -51,9 +51,7 @@ impl KeyPair {
             public_key: PublicKey {
                 bytes: verifying_key.to_bytes(),
             },
-            secret_key: SecretKey {
-                inner: signing_key,
-            },
+            secret_key: SecretKey { inner: signing_key },
         })
     }
 
@@ -66,9 +64,7 @@ impl KeyPair {
             public_key: PublicKey {
                 bytes: verifying_key.to_bytes(),
             },
-            secret_key: SecretKey {
-                inner: signing_key,
-            },
+            secret_key: SecretKey { inner: signing_key },
         })
     }
 

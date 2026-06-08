@@ -35,7 +35,9 @@ pub struct BleScanner {
 impl BleScanner {
     /// 初始化 BLE 扫描器
     pub async fn new(config: ShadowGateConfig) -> Result<Self> {
-        let manager = Manager::new().await.context("Failed to create BLE manager")?;
+        let manager = Manager::new()
+            .await
+            .context("Failed to create BLE manager")?;
 
         let adapters = manager
             .adapters()
@@ -89,10 +91,7 @@ impl BleScanner {
                 };
 
                 // 检查服务 UUID
-                let has_service = properties
-                    .services
-                    .iter()
-                    .any(|s| s == filter_uuid);
+                let has_service = properties.services.iter().any(|s| s == filter_uuid);
 
                 if !has_service {
                     continue;
@@ -163,9 +162,7 @@ impl BleScanner {
 }
 
 /// 从广播属性中解析 DeviceInfo
-fn parse_device_info(
-    props: &btleplug::api::PeripheralProperties,
-) -> Option<DeviceInfo> {
+fn parse_device_info(props: &btleplug::api::PeripheralProperties) -> Option<DeviceInfo> {
     // 策略 1: 从制造商数据中解析
     if let Some(ref mfr_data) = props.manufacturer_data {
         for (_company_id, data) in mfr_data.iter() {

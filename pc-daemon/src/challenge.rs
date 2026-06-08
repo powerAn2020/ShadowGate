@@ -40,10 +40,7 @@ impl ChallengeRunner {
     ///
     /// 返回: true = 认证通过, false = 认证失败
     pub async fn run(&self, device: DiscoveredDevice) -> Result<bool> {
-        info!(
-            "Starting Challenge-Response for device: {:?}",
-            device.name
-        );
+        info!("Starting Challenge-Response for device: {:?}", device.name);
 
         // 连接到设备
         let peripheral = &device.peripheral;
@@ -107,8 +104,7 @@ impl ChallengeRunner {
         let sequence: u32 = rand::thread_rng().next_u32();
 
         // 序列化质询请求
-        let challenge_payload =
-            protocol::create_challenge_request(&challenge, sequence)?;
+        let challenge_payload = protocol::create_challenge_request(&challenge, sequence)?;
 
         info!(
             "Sending challenge (seq={}, size={} bytes)...",
@@ -117,7 +113,10 @@ impl ChallengeRunner {
         );
 
         // 写入 Challenge (使用 Write Without Response 以节省时间)
-        let write_type = if challenge_char.properties.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE) {
+        let write_type = if challenge_char
+            .properties
+            .contains(CharPropFlags::WRITE_WITHOUT_RESPONSE)
+        {
             WriteType::WithoutResponse
         } else if challenge_char.properties.contains(CharPropFlags::WRITE) {
             WriteType::WithResponse
@@ -130,8 +129,10 @@ impl ChallengeRunner {
             .await
             .context("Failed to write challenge")?;
 
-        info!("Challenge sent, waiting for response (timeout: {}ms)...",
-            self.config.challenge.timeout_ms);
+        info!(
+            "Challenge sent, waiting for response (timeout: {}ms)...",
+            self.config.challenge.timeout_ms
+        );
 
         // 等待响应通知 (带超时)
         let timeout_duration = Duration::from_millis(self.config.challenge.timeout_ms);
@@ -238,8 +239,7 @@ impl ChallengeRunner {
         message.extend_from_slice(&expected_sequence.to_be_bytes());
 
         // 验证 Ed25519 签名
-        let pk = PublicKey::from_bytes(public_key)
-            .context("Invalid stored public key")?;
+        let pk = PublicKey::from_bytes(public_key).context("Invalid stored public key")?;
 
         let sig = SignatureBytes {
             bytes: resp.signature,

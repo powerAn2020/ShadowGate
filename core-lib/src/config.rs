@@ -2,8 +2,8 @@
 //!
 //! 从 TOML 配置文件加载配置，所有参数外部化，禁止硬编码。
 
-use serde::{Deserialize, Serialize};
 use crate::error::CoreResult;
+use serde::{Deserialize, Serialize};
 
 /// ShadowGate 全局配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,8 +108,10 @@ mod tests {
         let cfg = ShadowGateConfig::default_config();
         assert_eq!(cfg.rssi.unlock_threshold_dbm, -60);
         assert_eq!(cfg.rssi.lock_threshold_dbm, -80);
-        assert!(cfg.rssi.unlock_threshold_dbm > cfg.rssi.lock_threshold_dbm,
-            "hysteresis buffer requires unlock > lock");
+        assert!(
+            cfg.rssi.unlock_threshold_dbm > cfg.rssi.lock_threshold_dbm,
+            "hysteresis buffer requires unlock > lock"
+        );
     }
 
     #[test]

@@ -11,19 +11,19 @@
 //! - `ffi`: Android JNI 接口 (仅在 target_os="android" 时编译)
 //! - `error`: 统一错误类型
 
-pub mod crypto;
-pub mod rssi_filter;
-pub mod protocol;
 pub mod config;
-pub mod ffi;
+pub mod crypto;
 pub mod error;
+pub mod ffi;
+pub mod protocol;
+pub mod rssi_filter;
 
 // Re-export commonly used types
+pub use config::ShadowGateConfig;
 pub use crypto::{KeyPair, PublicKey, SignatureBytes};
-pub use rssi_filter::{HysteresisAction, HysteresisDetector, KalmanFilter, MovingAverageFilter};
+pub use error::{CoreError, CoreResult};
 pub use protocol::{
     ChallengeRequest, ChallengeResponse, DeviceInfo, MessageType, ProvisioningRequest,
     ProvisioningResponse, PROTOCOL_VERSION,
 };
-pub use config::ShadowGateConfig;
-pub use error::{CoreError, CoreResult};
+pub use rssi_filter::{HysteresisAction, HysteresisDetector, KalmanFilter, MovingAverageFilter};

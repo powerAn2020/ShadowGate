@@ -27,11 +27,7 @@ impl KalmanFilter {
     ///
     /// # Panics
     /// 如果 process_noise 或 measurement_noise <= 0
-    pub fn new(
-        initial_rssi: f64,
-        process_noise: f64,
-        measurement_noise: f64,
-    ) -> Self {
+    pub fn new(initial_rssi: f64, process_noise: f64, measurement_noise: f64) -> Self {
         assert!(
             process_noise > 0.0 && measurement_noise > 0.0,
             "Noise parameters must be positive"
@@ -164,8 +160,10 @@ impl HysteresisDetector {
         unlock_samples_required: usize,
         lock_samples_required: usize,
     ) -> Self {
-        assert!(unlock_threshold > lock_threshold,
-            "unlock_threshold must be > lock_threshold to form a hysteresis buffer zone");
+        assert!(
+            unlock_threshold > lock_threshold,
+            "unlock_threshold must be > lock_threshold to form a hysteresis buffer zone"
+        );
         HysteresisDetector {
             unlock_threshold,
             lock_threshold,
@@ -238,8 +236,11 @@ mod tests {
         }
         let estimate = kf.current_estimate();
         // 应接近 -60.0
-        assert!(estimate < -55.0 && estimate > -65.0,
-            "Kalman estimate {} not converging near -60", estimate);
+        assert!(
+            estimate < -55.0 && estimate > -65.0,
+            "Kalman estimate {} not converging near -60",
+            estimate
+        );
     }
 
     #[test]

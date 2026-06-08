@@ -52,11 +52,10 @@ impl DeviceStore {
             return Ok(Self::new());
         }
 
-        let content = std::fs::read_to_string(path)
-            .context("Failed to read device store file")?;
+        let content = std::fs::read_to_string(path).context("Failed to read device store file")?;
 
-        let mut store: DeviceStore = serde_json::from_str(&content)
-            .context("Failed to parse device store JSON")?;
+        let mut store: DeviceStore =
+            serde_json::from_str(&content).context("Failed to parse device store JSON")?;
 
         // 从 hex 解码公钥
         for device in store.devices.iter_mut() {
@@ -78,16 +77,14 @@ impl DeviceStore {
             device.public_key_hex = bytes_to_hex(&device.public_key);
         }
 
-        let content = serde_json::to_string_pretty(&save_copy)
-            .context("Failed to serialize device store")?;
+        let content =
+            serde_json::to_string_pretty(&save_copy).context("Failed to serialize device store")?;
 
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create device store directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create device store directory")?;
         }
 
-        std::fs::write(path, &content)
-            .context("Failed to write device store file")?;
+        std::fs::write(path, &content).context("Failed to write device store file")?;
 
         info!("Device store saved ({})", path.display());
         Ok(())
@@ -120,8 +117,7 @@ impl DeviceStore {
         };
 
         self.devices.push(device);
-        self.hash_index
-            .insert(hash_hex, self.devices.len() - 1);
+        self.hash_index.insert(hash_hex, self.devices.len() - 1);
 
         info!("Added trusted device");
         Ok(())

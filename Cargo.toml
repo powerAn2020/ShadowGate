@@ -45,10 +45,6 @@ jni = "0.21"
 base64 = "0.22"
 hex = "0.4"
 
-# Tauri (for tauri-ui only)
-tauri = { version = "2", features = ["tray-icon"] }
-tauri-build = "2"
-
 [profile.release]
 opt-level = "s"   # Optimize for size (important for Android .so)
 lto = true
