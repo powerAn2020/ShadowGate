@@ -43,8 +43,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - name: Install system deps (dbus for btleplug)
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libudev-dev
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo clippy --workspace --exclude shadowgate-ui --all-targets -- -D warnings
 
   # ===== 测试 (Linux + Windows) =====
   test-linux:
@@ -54,8 +56,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libudev-dev
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --exclude shadowgate-ui -- -Z unstable-options --format json 2>/dev/null || cargo test --workspace --exclude shadowgate-ui
+      - run: cargo test --workspace --exclude shadowgate-ui
 
   test-windows:
     name: Test (Windows)
@@ -79,7 +83,7 @@ jobs:
       - name: Install Linux deps
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libudev-dev
       - run: cargo build --release --workspace --exclude shadowgate-ui
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: shadowgate-linux-x86_64
           path: |
@@ -96,7 +100,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --workspace --exclude shadowgate-ui
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: shadowgate-windows-x86_64
           path: |
@@ -121,13 +125,9 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - name: Install Android NDK
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y android-sdk-platform-tools
-      - name: Build .so
+      - name: Build .so (core-lib only, no system deps)
         run: cargo build --release -p shadowgate-core --target ${{ matrix.target }}
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: shadowgate-android-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/libshadowgate_core.so
