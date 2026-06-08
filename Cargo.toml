@@ -45,6 +45,9 @@ jni = "0.21"
 base64 = "0.22"
 hex = "0.4"
 
+# Serde large array support
+serde_bytes = "0.11"
+
 [profile.release]
 opt-level = "s"   # Optimize for size (important for Android .so)
 lto = true

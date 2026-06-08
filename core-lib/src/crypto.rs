@@ -35,10 +35,11 @@ pub struct SecretKey {
     inner: SigningKey,
 }
 
-/// 签名数据
+/// 签名数据 (64 字节 Ed25519 签名)
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignatureBytes {
-    pub bytes: [u8; 64],
+    #[serde(with = "serde_bytes")]
+    pub bytes: Vec<u8>,
 }
 
 impl KeyPair {
@@ -72,7 +73,7 @@ impl KeyPair {
     pub fn sign(&self, message: &[u8]) -> SignatureBytes {
         let signature: Signature = self.secret_key.inner.sign(message);
         SignatureBytes {
-            bytes: signature.to_bytes(),
+            bytes: signature.to_bytes().to_vec(),
         }
     }
 
@@ -100,13 +101,14 @@ impl PublicKey {
     pub fn verify(&self, message: &[u8], signature: &SignatureBytes) -> CoreResult<bool> {
         let verifying_key = VerifyingKey::from_bytes(&self.bytes)
             .map_err(|e| CoreError::InvalidKey(format!("invalid public key: {}", e)))?;
-        let sig = Signature::from_bytes(&signature.bytes);
+        let sig = Signature::from_slice(&signature.bytes)
+            .map_err(|e| CoreError::InvalidKey(format!("invalid signature: {}", e)))?;
         Ok(verifying_key.verify(message, &sig).is_ok())
     }
 
     /// 序列化为 Base64 字符串 (用于 QR 码 / 配置存储)
     pub fn to_base64(&self) -> String {
-        base64::engine::general_purpose::STANDARD.encode(&self.bytes)
+        base64::engine::general_purpose::STANDARD.encode(self.bytes)
     }
 
     /// 从 Base64 字符串反序列化

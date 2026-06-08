@@ -90,8 +90,9 @@ pub struct ProvisioningRequest {
 pub struct ProvisioningResponse {
     /// 响应方公钥 (32 字节 Ed25519)
     pub public_key: [u8; 32],
-    /// 对请求的签名 (证明持有私钥)
-    pub signature: [u8; 64],
+    /// 对请求的签名 (证明持有私钥, 64 字节)
+    #[serde(with = "serde_bytes")]
+    pub signature: Vec<u8>,
     /// 设备名称
     pub device_name: String,
 }
@@ -111,7 +112,8 @@ pub struct ChallengeRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChallengeResponse {
     /// 签名 (64 字节 Ed25519)
-    pub signature: [u8; 64],
+    #[serde(with = "serde_bytes")]
+    pub signature: Vec<u8>,
     /// 回显序列号
     pub sequence: u32,
     /// 当前设备 RSSI (Android 端测得，用于双向校准)
@@ -169,7 +171,7 @@ pub fn create_challenge_response(
     device_rssi: i8,
 ) -> CoreResult<Vec<u8>> {
     let resp = ChallengeResponse {
-        signature: signature.bytes,
+        signature: signature.bytes.clone(),
         sequence,
         device_rssi,
     };

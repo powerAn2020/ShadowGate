@@ -97,7 +97,9 @@ mod android_impl {
             Err(_) => return 0,
         };
 
-        let sig = crate::crypto::SignatureBytes { bytes: sig_arr };
+        let sig = crate::crypto::SignatureBytes {
+            bytes: sig_arr.to_vec(),
+        };
 
         pk.verify(&msg_bytes, &sig).unwrap_or(false) as jboolean
     }
@@ -201,7 +203,9 @@ mod android_impl {
             }
         };
 
-        let sig = crate::crypto::SignatureBytes { bytes: sig_arr };
+        let sig = crate::crypto::SignatureBytes {
+            bytes: sig_arr.to_vec(),
+        };
         let data = protocol::create_challenge_response(&sig, sequence as u32, device_rssi)
             .unwrap_or_default();
 

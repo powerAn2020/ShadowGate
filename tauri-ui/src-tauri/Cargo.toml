@@ -4,9 +4,8 @@ version = "0.1.0"
 edition = "2021"
 description = "ShadowGate Tauri Configuration UI"
 
-[lib]
-name = "shadowgate_ui_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Tauri is NOT part of the parent workspace
+[workspace]
 
 [build-dependencies]
 tauri-build = "2"
