@@ -4,11 +4,17 @@ on:
   push:
     branches: [main, master]
     paths:
+      - 'core-lib/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'android-app/**'
       - '.github/workflows/android-ci.yml'
   pull_request:
     branches: [main, master]
     paths:
+      - 'core-lib/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'android-app/**'
       - '.github/workflows/android-ci.yml'
 
@@ -19,7 +25,6 @@ jobs:
   build-apk:
     name: Build APK
     runs-on: ubuntu-latest
-    continue-on-error: true  # Kotlin compilation needs local env verification
     steps:
       - uses: actions/checkout@v4
 
@@ -39,13 +44,47 @@ jobs:
         with:
           gradle-version: 8.7
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Android Rust targets
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+
+      - name: Install Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+
+      - name: Build native core for APK
+        run: |
+          cargo build --release -p shadowgate-core --target aarch64-linux-android
+          cargo build --release -p shadowgate-core --target armv7-linux-androideabi
+          cargo build --release -p shadowgate-core --target x86_64-linux-android
+          mkdir -p android-app/app/src/main/jniLibs/arm64-v8a
+          mkdir -p android-app/app/src/main/jniLibs/armeabi-v7a
+          mkdir -p android-app/app/src/main/jniLibs/x86_64
+          cp target/aarch64-linux-android/release/libshadowgate_core.so android-app/app/src/main/jniLibs/arm64-v8a/
+          cp target/armv7-linux-androideabi/release/libshadowgate_core.so android-app/app/src/main/jniLibs/armeabi-v7a/
+          cp target/x86_64-linux-android/release/libshadowgate_core.so android-app/app/src/main/jniLibs/x86_64/
+        env:
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          CC_aarch64_linux_android: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          CC_armv7_linux_androideabi: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang
+          CC_x86_64_linux_android: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          AR_aarch64_linux_android: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          AR_armv7_linux_androideabi: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          AR_x86_64_linux_android: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+
       - name: Gradle check (configuration only)
         working-directory: android-app
-        run: gradle help --no-daemon 2>&1 | tail -5
+        run: gradle help --no-daemon
 
       - name: Build APK
         working-directory: android-app
-        run: gradle assembleDebug --no-daemon --stacktrace 2>&1 | tail -20
+        run: gradle assembleDebug --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v4
         if: success()

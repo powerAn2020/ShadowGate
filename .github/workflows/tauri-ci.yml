@@ -18,7 +18,6 @@ jobs:
   build-windows:
     name: Build (Windows)
     runs-on: windows-latest
-    continue-on-error: true  # Windows resource icon needs real .ico
     steps:
       - uses: actions/checkout@v4
 
@@ -40,10 +39,6 @@ jobs:
       - name: Install npm dependencies
         working-directory: tauri-ui
         run: npm ci
-
-      - name: Install Tauri CLI
-        working-directory: tauri-ui
-        run: npm install -D @tauri-apps/cli@latest
 
       - name: Build Tauri
         working-directory: tauri-ui
