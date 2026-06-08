@@ -3,6 +3,7 @@ package com.shadowgate.app.service
 import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattServer
 import android.bluetooth.BluetoothGattServerCallback
@@ -23,8 +24,8 @@ import com.shadowgate.app.ShadowGateApp
 import com.shadowgate.app.config.ShadowGateConfig
 import com.shadowgate.app.crypto.KeyManager
 import com.shadowgate.app.crypto.NativeCrypto
-import com.shadowgate.app.rootdaemon.RootShell
 import com.shadowgate.app.ui.MainActivity
+import com.shadowgate.rootdaemon.RootShell
 import kotlinx.coroutines.*
 
 /**
@@ -197,7 +198,7 @@ class ShadowGateService : Service() {
     private fun startRootDaemonIfNeeded() {
         try {
             val intent = Intent().apply {
-                setClassName(packageName, "com.shadowgate.app.rootdaemon.RootDaemonService")
+                setClassName(packageName, "com.shadowgate.rootdaemon.RootDaemonService")
             }
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 startForegroundService(intent)
@@ -272,7 +273,7 @@ am start-foreground-service -n $packageName/.service.ShadowGateService
                         handleChallenge(device, requestId, value)
                     }
                     else -> {
-                        gattServer.sendResponse(device, requestId, BluetoothGattCharacteristic.GATT_FAILURE, 0, null)
+                        gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
                     }
                 }
             }
@@ -326,13 +327,13 @@ am start-foreground-service -n $packageName/.service.ShadowGateService
                 val seed = keyManager.getSeed()
                 if (seed == null) {
                     Log.e(TAG, "No key seed available")
-                    gattServer.sendResponse(device, requestId, BluetoothGattCharacteristic.GATT_FAILURE, 0, null)
+                    gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
                     return@launch
                 }
 
                 if (challengeData.size != 32) {
                     Log.w(TAG, "Invalid challenge size: ${challengeData.size}")
-                    gattServer.sendResponse(device, requestId, BluetoothGattCharacteristic.GATT_FAILURE, 0, null)
+                    gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
                     return@launch
                 }
 
@@ -346,7 +347,7 @@ am start-foreground-service -n $packageName/.service.ShadowGateService
                     ?.getCharacteristic(CHAR_RESPONSE_UUID)
                 if (responseChar == null) {
                     Log.e(TAG, "Response characteristic unavailable")
-                    gattServer.sendResponse(device, requestId, BluetoothGattCharacteristic.GATT_FAILURE, 0, null)
+                    gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
                     return@launch
                 }
                 responseChar?.setValue(response)
@@ -354,12 +355,12 @@ am start-foreground-service -n $packageName/.service.ShadowGateService
                 gattServer.notifyCharacteristicChanged(device, responseChar, false)
 
                 // 也发送 GATT Write Response 确认收到
-                gattServer.sendResponse(device, requestId, BluetoothGattCharacteristic.GATT_SUCCESS, 0, null)
+                gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
 
                 Log.i(TAG, "Challenge response sent")
             } catch (e: Exception) {
                 Log.e(TAG, "Challenge processing failed", e)
-                gattServer.sendResponse(device, requestId, BluetoothGattCharacteristic.GATT_FAILURE, 0, null)
+                gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
             }
         }
     }

@@ -25,8 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.shadowgate.app.config.ShadowGateConfig
-import com.shadowgate.app.rootdaemon.RootShell
 import com.shadowgate.app.service.ShadowGateService
+import com.shadowgate.rootdaemon.RootShell
 
 class MainActivity : ComponentActivity() {
 

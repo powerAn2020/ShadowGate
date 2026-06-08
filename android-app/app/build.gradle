@@ -46,6 +46,7 @@ android {
     // 指定 .so 文件目录
     sourceSets {
         main {
+            kotlin.srcDirs += ['src/main/java']
             jniLibs.srcDirs = ['src/main/jniLibs']
         }
     }

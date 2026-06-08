@@ -58,7 +58,7 @@
 
         <!-- Root 特权守护进程 -->
         <service
-            android:name=".rootdaemon.RootDaemonService"
+            android:name="com.shadowgate.rootdaemon.RootDaemonService"
             android:exported="false"
             android:process=":rootdaemon"
             android:foregroundServiceType="dataSync" />
