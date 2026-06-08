@@ -34,6 +34,31 @@ mod android_impl {
             .into_raw()
     }
 
+    /// 从 32 字节私钥种子推导 Ed25519 公钥
+    ///
+    /// Kotlin 调用: `NativeCrypto.getPublicKeyFromSeed(seed): ByteArray`
+    #[no_mangle]
+    pub extern "system" fn Java_com_shadowgate_app_crypto_NativeCrypto_getPublicKeyFromSeed(
+        mut env: JNIEnv,
+        _class: JClass,
+        seed: JByteArray,
+    ) -> jbyteArray {
+        let seed_bytes: Vec<u8> = env.convert_byte_array(&seed).unwrap_or_default();
+        let seed_arr: [u8; 32] = match seed_bytes.as_slice().try_into() {
+            Ok(seed) => seed,
+            Err(_) => return env.byte_array_from_slice(&[]).expect("").into_raw(),
+        };
+
+        let keypair = match KeyPair::from_bytes(&seed_arr) {
+            Ok(keypair) => keypair,
+            Err(_) => return env.byte_array_from_slice(&[]).expect("").into_raw(),
+        };
+
+        env.byte_array_from_slice(keypair.public_key_bytes())
+            .expect("failed to create byte array")
+            .into_raw()
+    }
+
     /// 从种子恢复密钥对并签名
     ///
     /// @param seed 32 字节私钥种子

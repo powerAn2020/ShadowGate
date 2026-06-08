@@ -21,7 +21,7 @@ function mockResponse(cmd) {
     case 'get_config':
       return { unlock_threshold: -60, lock_threshold: -80, scan_interval_ms: 1000, challenge_timeout_ms: 1500, lock_confirmation_ms: 5000 };
     case 'get_logs':
-      return ['[12:00:01] ShadowGate daemon started', '[12:00:02] BLE adapter initialized (Intel AX210)', '[12:00:03] Loaded 1 trusted device(s)', '[12:00:05] BLE scan started (filter: 0000shadow...)'];
+      return ['[12:00:01] ShadowGate daemon started', '[12:00:02] BLE adapter initialized (Intel AX210)', '[12:00:03] Loaded 1 trusted device(s)', '[12:00:05] BLE scan started (filter: 7f4d0001...)'];
     case 'toggle_daemon':
       return true;
     case 'pair_device':

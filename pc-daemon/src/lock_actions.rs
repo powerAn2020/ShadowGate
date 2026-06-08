@@ -2,7 +2,7 @@
 //!
 //! 使用 windows-rs 调用 Win32 API
 
-use log::{error, info};
+use log::info;
 
 /// 锁定 Windows 工作站
 pub fn lock_workstation() -> Result<(), String> {
@@ -10,7 +10,7 @@ pub fn lock_workstation() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     unsafe {
-        use windows::Win32::UI::Input::KeyboardAndMouse::LockWorkStation;
+        use windows::Win32::System::Shutdown::LockWorkStation;
         LockWorkStation().map_err(|e| format!("LockWorkStation failed: {:?}", e))?;
     }
 
@@ -44,18 +44,17 @@ pub fn unlock_workstation() -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn simulate_input() {
-    use std::mem;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        keybd_event, KEYEVENTF_KEYUP, VK_LCONTROL, VK_LMENU, VK_RETURN,
+        keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_LCONTROL, VK_LMENU, VK_RETURN,
     };
 
     unsafe {
         // Send Ctrl+Alt+Enter (placeholder for actual unlock sequence)
-        keybd_event(VK_LCONTROL, 0, 0, 0);
-        keybd_event(VK_LMENU, 0, 0, 0);
-        keybd_event(VK_RETURN, 0, 0, 0);
-        keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, 0);
-        keybd_event(VK_LMENU, 0, KEYEVENTF_KEYUP, 0);
-        keybd_event(VK_LCONTROL, 0, KEYEVENTF_KEYUP, 0);
+        keybd_event(VK_LCONTROL.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
+        keybd_event(VK_LMENU.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
+        keybd_event(VK_RETURN.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
+        keybd_event(VK_RETURN.0 as u8, 0, KEYEVENTF_KEYUP, 0);
+        keybd_event(VK_LMENU.0 as u8, 0, KEYEVENTF_KEYUP, 0);
+        keybd_event(VK_LCONTROL.0 as u8, 0, KEYEVENTF_KEYUP, 0);
     }
 }

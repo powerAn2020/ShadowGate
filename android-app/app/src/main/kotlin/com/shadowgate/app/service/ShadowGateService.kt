@@ -20,12 +20,12 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.shadowgate.app.ShadowGateApp
+import com.shadowgate.app.config.ShadowGateConfig
 import com.shadowgate.app.crypto.KeyManager
 import com.shadowgate.app.crypto.NativeCrypto
 import com.shadowgate.app.rootdaemon.RootShell
 import com.shadowgate.app.ui.MainActivity
 import kotlinx.coroutines.*
-import java.util.UUID
 
 /**
  * ShadowGate BLE 前台服务
@@ -41,11 +41,10 @@ class ShadowGateService : Service() {
     companion object {
         private const val TAG = "ShadowGate"
 
-        // BLE Service & Characteristic UUIDs
-        val SERVICE_UUID = UUID.fromString("0000shadow-0000-1000-8000-00805f9b34fb")
-        val CHAR_CHALLENGE_UUID = UUID.fromString("0000chall-0000-1000-8000-00805f9b34fb")
-        val CHAR_RESPONSE_UUID = UUID.fromString("0000resp-0000-1000-8000-00805f9b34fb")
-        val CHAR_DEVICE_ID_UUID = UUID.fromString("0000devid-0000-1000-8000-00805f9b34fb")
+        val SERVICE_UUID = ShadowGateConfig.SERVICE_UUID
+        val CHAR_CHALLENGE_UUID = ShadowGateConfig.CHAR_CHALLENGE_UUID
+        val CHAR_RESPONSE_UUID = ShadowGateConfig.CHAR_RESPONSE_UUID
+        val CHAR_DEVICE_ID_UUID = ShadowGateConfig.CHAR_DEVICE_ID_UUID
 
         // Actions
         const val ACTION_START = "com.shadowgate.action.START"
@@ -63,6 +62,7 @@ class ShadowGateService : Service() {
     private lateinit var wakeLock: PowerManager.WakeLock
 
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var advertiseCallback: AdvertiseCallback? = null
     private var isAdvertising = false
 
     override fun onCreate() {
@@ -330,20 +330,25 @@ am start-foreground-service -n $packageName/.service.ShadowGateService
                     return@launch
                 }
 
-                // 用私钥签名 Challenge
+                if (challengeData.size != 32) {
+                    Log.w(TAG, "Invalid challenge size: ${challengeData.size}")
+                    gattServer.sendResponse(device, requestId, BluetoothGattCharacteristic.GATT_FAILURE, 0, null)
+                    return@launch
+                }
+
+                // 用私钥签名 32 字节 Challenge
                 val signature = NativeCrypto.sign(seed, challengeData)
 
-                // 构造响应
-                val sequence = if (challengeData.size >= 4) {
-                    // 从 challenge 中提取序列号
-                    challengeData.takeLast(4).fold(0) { acc, b -> (acc shl 8) or (b.toInt() and 0xFF) }
-                } else 0
-
-                val response = NativeCrypto.createChallengeResponse(signature, sequence, 0)
+                val response = NativeCrypto.createChallengeResponse(signature, 0, 0)
 
                 // 发送响应 (通过 Notification)
                 val responseChar = gattServer.getService(SERVICE_UUID)
                     ?.getCharacteristic(CHAR_RESPONSE_UUID)
+                if (responseChar == null) {
+                    Log.e(TAG, "Response characteristic unavailable")
+                    gattServer.sendResponse(device, requestId, BluetoothGattCharacteristic.GATT_FAILURE, 0, null)
+                    return@launch
+                }
                 responseChar?.setValue(response)
 
                 gattServer.notifyCharacteristicChanged(device, responseChar, false)
@@ -371,9 +376,16 @@ am start-foreground-service -n $packageName/.service.ShadowGateService
     // ===== BLE Advertising =====
 
     private fun startAdvertising() {
+        val prefs = getSharedPreferences("shadowgate_config", Context.MODE_PRIVATE)
+        val txPower = when (prefs.getString(PREF_TX_POWER, ShadowGateConfig.DEFAULT_TX_POWER)) {
+            "LOW" -> AdvertiseSettings.ADVERTISE_TX_POWER_LOW
+            "HIGH" -> AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
+            else -> AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
+        }
+
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .setTxPowerLevel(txPower)
             .setConnectable(true)
             .setTimeout(0) // 持续广播
             .build()
@@ -391,7 +403,7 @@ am start-foreground-service -n $packageName/.service.ShadowGateService
             .setIncludeDeviceName(true)
             .build()
 
-        advertiser.startAdvertising(settings, advertiseData, scanResponse, object : AdvertiseCallback() {
+        advertiseCallback = object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
                 isAdvertising = true
                 Log.i(TAG, "BLE Advertising started (mode=${settingsInEffect.mode}, tx=${settingsInEffect.txPowerLevel})")
@@ -401,11 +413,13 @@ am start-foreground-service -n $packageName/.service.ShadowGateService
                 isAdvertising = false
                 Log.e(TAG, "BLE Advertising failed: error=$errorCode")
             }
-        })
+        }
+        advertiser.startAdvertising(settings, advertiseData, scanResponse, advertiseCallback)
     }
 
     private fun stopAdvertising() {
-        advertiser.stopAdvertising(AdvertiseCallback {})
+        advertiseCallback?.let { advertiser.stopAdvertising(it) }
+        advertiseCallback = null
         isAdvertising = false
         Log.i(TAG, "BLE Advertising stopped")
     }

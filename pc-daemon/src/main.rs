@@ -10,7 +10,7 @@ mod lock_actions;
 mod power_monitor;
 mod state_machine;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use log::{error, info, warn};
 use shadowgate_core::ShadowGateConfig;
 use std::path::PathBuf;
@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
     }));
 
     // 启动状态机
-    let mut sm = StateMachine::new(config, ctx.clone());
+    let mut sm = StateMachine::new(config.clone(), ctx.clone());
 
     // 启动电源监听器 (后台任务)
     let power_ctx = ctx.clone();

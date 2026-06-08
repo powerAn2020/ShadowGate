@@ -1,15 +1,13 @@
-//! 状态机模块 — 简化版
+//! 状态机模块
 //!
-//! IDLE → SCANNING → AUTHENTICATING → UNLOCKED → MONITORING
+//! IDLE -> SCANNING -> AUTHENTICATING -> UNLOCKED -> MONITORING
 
 use anyhow::Result;
-use log::{error, info, warn};
+use log::{info, warn};
 use shadowgate_core::rssi_filter::{HysteresisAction, HysteresisDetector, KalmanFilter};
 use shadowgate_core::ShadowGateConfig;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration};
-use uuid::Uuid;
 
 use crate::ble_scanner::{BleScanner, DiscoveredDevice};
 use crate::challenge::ChallengeRunner;
@@ -68,82 +66,172 @@ impl StateMachine {
                     info!("State: IDLE -> SCANNING");
                     self.state = SystemState::Scanning;
                 }
-                SystemState::Scanning => {
-                    self.run_scanning_loop().await?;
-                }
-                SystemState::Authenticating => {
-                    self.run_auth().await?;
-                }
+                SystemState::Scanning => self.run_scanning_loop().await?,
+                SystemState::Authenticating => self.run_auth().await?,
                 SystemState::Unlocked => {
-                    info!("State: UNLOCKED (simulated)");
-                    sleep(Duration::from_secs(5)).await;
+                    info!("State: UNLOCKED -> MONITORING");
                     self.state = SystemState::Monitoring;
                 }
-                SystemState::Monitoring => {
-                    info!("State: MONITORING (simulated)");
-                    sleep(Duration::from_secs(10)).await;
-                    self.state = SystemState::Scanning;
-                }
+                SystemState::Monitoring => self.run_monitoring_loop().await?,
             }
         }
     }
 
     async fn run_scanning_loop(&mut self) -> Result<()> {
-        let service_uuid: Uuid = self.config.ble.service_uuid.parse()?;
-        let unlock_threshold = self.config.rssi.unlock_threshold_dbm as f64;
-        let mut scanner = BleScanner::new(self.config.clone()).await?;
-
-        // Simplified: poll for devices using btleplug peripherals API directly
-        scanner
-            .adapter()
-            .start_scan(btleplug::api::ScanFilter::default())
-            .await?;
-        info!("Scanning for devices matching {}...", service_uuid);
-
-        // Scan for a few seconds, looking for devices
-        for _ in 0..20 {
-            sleep(Duration::from_millis(500)).await;
-            let peripherals = scanner.adapter().peripherals().await?;
-
-            for p in peripherals.iter() {
-                if let Ok(Some(props)) = p.properties().await {
-                    if let Some(rssi) = props.rssi {
-                        let has_service = props.services.iter().any(|s| s == &service_uuid);
-                        if has_service && (rssi as f64) >= unlock_threshold {
-                            // Check if device is trusted
-                            let ctx = self.ctx.lock().await;
-                            let known = ctx.device_store.count() > 0;
-                            drop(ctx);
-
-                            if known {
-                                info!("Found trusted device at RSSI={}dBm", rssi);
-                                scanner.adapter().stop_scan().await?;
-
-                                let mut ctx = self.ctx.lock().await;
-                                ctx.current_rssi = Some(rssi as f64);
-                                drop(ctx);
-
-                                self.state = SystemState::Authenticating;
-                                return Ok(());
-                            }
-                        }
-                    }
-                }
-            }
+        let trusted_hashes = self.trusted_hashes().await;
+        if trusted_hashes.is_empty() {
+            warn!("No trusted devices configured; staying in SCANNING");
         }
 
-        scanner.adapter().stop_scan().await?;
+        let mut scanner = BleScanner::new(self.config.clone()).await?;
+        let service_uuid = self.config.ble.service_uuid.parse()?;
+        let mut selected_device: Option<DiscoveredDevice> = None;
+        let mut filter = KalmanFilter::default();
+        let mut detector = HysteresisDetector::new(
+            self.config.rssi.unlock_threshold_dbm as f64,
+            self.config.rssi.lock_threshold_dbm as f64,
+            self.config.rssi.hysteresis_samples,
+            self.config.rssi.hysteresis_samples,
+        );
+
+        info!("Scanning for trusted devices matching {}...", service_uuid);
+        scanner
+            .scan(&service_uuid, |device| {
+                if !trusted_hashes.contains(&device.device_info.device_hash) {
+                    return false;
+                }
+
+                let smoothed_rssi = filter.update(device.rssi as f64);
+                if detector.update(smoothed_rssi) == HysteresisAction::Unlock {
+                    info!(
+                        "Trusted device reached unlock threshold: raw={}dBm filtered={:.1}dBm",
+                        device.rssi, smoothed_rssi
+                    );
+                    selected_device = Some(device);
+                    return true;
+                }
+
+                false
+            })
+            .await?;
+
+        if let Some(device) = selected_device {
+            let mut ctx = self.ctx.lock().await;
+            ctx.current_rssi = Some(device.rssi as f64);
+            ctx.connected_device = Some(device);
+            self.state = SystemState::Authenticating;
+        }
+
         Ok(())
     }
 
     async fn run_auth(&mut self) -> Result<()> {
-        info!("Authenticating...");
-        sleep(Duration::from_secs(1)).await;
+        let device = {
+            let mut ctx = self.ctx.lock().await;
+            ctx.connected_device.take()
+        };
 
-        // Simplified: attempt unlock
-        let _ = unlock_workstation();
-        info!("Authentication passed -> UNLOCKED");
-        self.state = SystemState::Unlocked;
+        let Some(device) = device else {
+            warn!("Authentication requested without a selected device");
+            self.state = SystemState::Scanning;
+            return Ok(());
+        };
+
+        let runner = ChallengeRunner::new(self.config.clone(), self.ctx.clone());
+        if runner.run(device.clone()).await? {
+            unlock_workstation().map_err(anyhow::Error::msg)?;
+            let mut ctx = self.ctx.lock().await;
+            ctx.connected_device = Some(device);
+            info!("Authentication passed -> UNLOCKED");
+            self.state = SystemState::Unlocked;
+        } else {
+            warn!("Authentication failed -> SCANNING");
+            self.state = SystemState::Scanning;
+        }
+
         Ok(())
     }
+
+    async fn run_monitoring_loop(&mut self) -> Result<()> {
+        let target_hash = {
+            let ctx = self.ctx.lock().await;
+            ctx.connected_device
+                .as_ref()
+                .map(|device| device.device_info.device_hash)
+        };
+
+        let Some(target_hash) = target_hash else {
+            self.state = SystemState::Scanning;
+            return Ok(());
+        };
+
+        let mut scanner = BleScanner::new(self.config.clone()).await?;
+        let service_uuid = self.config.ble.service_uuid.parse()?;
+        let lock_samples = lock_sample_count(&self.config);
+        let mut filter = KalmanFilter::default();
+        let mut detector = HysteresisDetector::new(
+            self.config.rssi.unlock_threshold_dbm as f64,
+            self.config.rssi.lock_threshold_dbm as f64,
+            self.config.rssi.hysteresis_samples,
+            lock_samples,
+        );
+
+        info!(
+            "Monitoring trusted device; lock requires {} low RSSI samples",
+            lock_samples
+        );
+        scanner
+            .scan(&service_uuid, |device| {
+                if device.device_info.device_hash != target_hash {
+                    return false;
+                }
+
+                let smoothed_rssi = filter.update(device.rssi as f64);
+                if detector.update(smoothed_rssi) == HysteresisAction::Lock {
+                    info!(
+                        "Trusted device reached lock threshold: raw={}dBm filtered={:.1}dBm",
+                        device.rssi, smoothed_rssi
+                    );
+                    return true;
+                }
+
+                false
+            })
+            .await?;
+
+        lock_workstation().map_err(anyhow::Error::msg)?;
+        let mut ctx = self.ctx.lock().await;
+        ctx.connected_device = None;
+        ctx.current_rssi = None;
+        self.state = SystemState::Scanning;
+        Ok(())
+    }
+
+    async fn trusted_hashes(&self) -> Vec<[u8; 8]> {
+        let ctx = self.ctx.lock().await;
+        ctx.device_store
+            .all_devices()
+            .iter()
+            .filter_map(|device| hex_hash_to_bytes(&device.device_hash))
+            .collect()
+    }
+}
+
+fn lock_sample_count(config: &ShadowGateConfig) -> usize {
+    let interval = config.rssi.rssi_sample_interval_ms.max(1);
+    let by_duration = config.rssi.lock_confirmation_ms.div_ceil(interval) as usize;
+    by_duration.max(config.rssi.hysteresis_samples)
+}
+
+fn hex_hash_to_bytes(hex: &str) -> Option<[u8; 8]> {
+    if hex.len() != 16 {
+        return None;
+    }
+
+    let mut out = [0u8; 8];
+    for (idx, slot) in out.iter_mut().enumerate() {
+        let start = idx * 2;
+        *slot = u8::from_str_radix(&hex[start..start + 2], 16).ok()?;
+    }
+    Some(out)
 }

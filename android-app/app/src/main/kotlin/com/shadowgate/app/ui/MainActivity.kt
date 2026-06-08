@@ -1,6 +1,7 @@
 package com.shadowgate.app.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -23,8 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.shadowgate.app.crypto.KeyManager
-import com.shadowgate.app.crypto.NativeCrypto
+import com.shadowgate.app.config.ShadowGateConfig
 import com.shadowgate.app.rootdaemon.RootShell
 import com.shadowgate.app.service.ShadowGateService
 
@@ -77,6 +77,13 @@ class MainActivity : ComponentActivity() {
                             }
                             startActivity(intent)
                         }
+                    },
+                    onConfigChanged = { txPower, advertiseInterval ->
+                        getSharedPreferences("shadowgate_config", Context.MODE_PRIVATE)
+                            .edit()
+                            .putString(ShadowGateService.PREF_TX_POWER, txPower)
+                            .putInt(ShadowGateService.PREF_ADVERTISE_INTERVAL, advertiseInterval)
+                            .apply()
                     }
                 )
             }
@@ -132,11 +139,12 @@ fun ShadowGateTheme(content: @Composable () -> Unit) {
 @Composable
 fun ShadowGateScreen(
     onToggleService: (Boolean) -> Unit,
-    onRequestBatteryOptimization: () -> Unit
+    onRequestBatteryOptimization: () -> Unit,
+    onConfigChanged: (String, Int) -> Unit
 ) {
     var isServiceRunning by remember { mutableStateOf(false) }
-    var txPower by remember { mutableStateOf("MEDIUM") }
-    var advertiseInterval by remember { mutableIntStateOf(1000) }
+    var txPower by remember { mutableStateOf(ShadowGateConfig.DEFAULT_TX_POWER) }
+    var advertiseInterval by remember { mutableIntStateOf(ShadowGateConfig.DEFAULT_ADVERTISE_INTERVAL_MS) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -255,7 +263,10 @@ fun ShadowGateScreen(
                         listOf("LOW", "MEDIUM", "HIGH").forEach { level ->
                             FilterChip(
                                 selected = txPower == level,
-                                onClick = { txPower = level },
+                                onClick = {
+                                    txPower = level
+                                    onConfigChanged(txPower, advertiseInterval)
+                                },
                                 label = { Text(level) }
                             )
                         }
@@ -269,7 +280,10 @@ fun ShadowGateScreen(
                     )
                     Slider(
                         value = advertiseInterval.toFloat(),
-                        onValueChange = { advertiseInterval = it.toInt() },
+                        onValueChange = {
+                            advertiseInterval = it.toInt()
+                            onConfigChanged(txPower, advertiseInterval)
+                        },
                         valueRange = 200f..5000f,
                         steps = 47,
                         modifier = Modifier.fillMaxWidth()

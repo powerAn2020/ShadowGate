@@ -5,11 +5,9 @@
 use anyhow::{Context, Result};
 use btleplug::api::{Central, Manager as _, Peripheral as _, ScanFilter};
 use btleplug::platform::{Adapter, Manager};
-use log::{debug, info, warn};
+use log::{debug, info};
 use shadowgate_core::protocol::{self, DeviceInfo};
 use shadowgate_core::ShadowGateConfig;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
@@ -164,25 +162,32 @@ impl BleScanner {
 /// 从广播属性中解析 DeviceInfo
 fn parse_device_info(props: &btleplug::api::PeripheralProperties) -> Option<DeviceInfo> {
     // 策略 1: 从制造商数据中解析
-    if let Some(ref mfr_data) = props.manufacturer_data {
-        for (_company_id, data) in mfr_data.iter() {
-            if data.len() >= 9 {
-                // 尝试 bincode 反序列化
-                if let Ok(info) = protocol::deserialize::<DeviceInfo>(data) {
-                    return Some(info);
-                }
-            }
+    for (_company_id, data) in props.manufacturer_data.iter() {
+        if let Some(info) = parse_device_info_payload(data) {
+            return Some(info);
         }
     }
 
     // 策略 2: 从服务数据中解析
-    if let Some(ref svc_data) = props.service_data {
-        for (_uuid, data) in svc_data.iter() {
-            if let Ok(info) = protocol::deserialize::<DeviceInfo>(data) {
-                return Some(info);
-            }
+    for (_uuid, data) in props.service_data.iter() {
+        if let Some(info) = parse_device_info_payload(data) {
+            return Some(info);
         }
     }
 
     None
+}
+
+fn parse_device_info_payload(data: &[u8]) -> Option<DeviceInfo> {
+    if data.len() == 8 {
+        let mut device_hash = [0u8; 8];
+        device_hash.copy_from_slice(data);
+        return Some(DeviceInfo {
+            device_hash,
+            protocol_version: protocol::PROTOCOL_VERSION,
+            capabilities: 0,
+        });
+    }
+
+    protocol::deserialize::<DeviceInfo>(data).ok()
 }

@@ -1,15 +1,16 @@
-//! Challenge-Response 质询响应认证模块 (简化版)
+//! Challenge-Response 质询响应认证模块
 
 use anyhow::{Context, Result};
 use btleplug::api::{CharPropFlags, Peripheral as _, WriteType};
-use log::{debug, error, info, warn};
+use futures::StreamExt;
+use log::{info, warn};
 use rand::RngCore;
-use shadowgate_core::crypto::PublicKey;
+use shadowgate_core::crypto::{PublicKey, SignatureBytes};
 use shadowgate_core::protocol;
 use shadowgate_core::ShadowGateConfig;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
 use crate::ble_scanner::DiscoveredDevice;
@@ -26,7 +27,10 @@ impl ChallengeRunner {
     }
 
     pub async fn run(&self, device: DiscoveredDevice) -> Result<bool> {
-        info!("Starting Challenge-Response...");
+        info!(
+            "Starting Challenge-Response for device hash {:02x?}",
+            device.device_info.device_hash
+        );
 
         let peripheral = &device.peripheral;
         if !peripheral.is_connected().await? {
@@ -49,17 +53,12 @@ impl ChallengeRunner {
             .find(|c| c.uuid == response_uuid)
             .context("Response char not found")?;
 
-        // Subscribe to notifications
         if response_char.properties.contains(CharPropFlags::NOTIFY) {
-            peripheral.subscribe(&response_char).await?;
+            peripheral.subscribe(response_char).await?;
         }
 
-        // Generate challenge
         let mut challenge = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut challenge);
-        let sequence: u32 = rand::thread_rng().next_u32();
-
-        let challenge_payload = protocol::create_challenge_request(&challenge, sequence)?;
 
         let write_type = if challenge_char
             .properties
@@ -71,33 +70,39 @@ impl ChallengeRunner {
         };
 
         peripheral
-            .write(&challenge_char, &challenge_payload, write_type)
+            .write(challenge_char, &challenge, write_type)
             .await?;
-        info!("Challenge sent (seq={})", sequence);
+        info!("Challenge sent");
 
-        // Wait for notification with timeout
         let timeout_ms = self.config.challenge.timeout_ms;
         let result = timeout(Duration::from_millis(timeout_ms), async {
             let mut stream = peripheral.notifications().await?;
             loop {
-                if let Some(notification) = stream.next().await {
-                    if notification.uuid == response_uuid {
+                match stream.next().await {
+                    Some(notification) if notification.uuid == response_uuid => {
                         return Ok(notification.value);
                     }
+                    Some(_) => {}
+                    None => anyhow::bail!("notification stream ended before response"),
                 }
             }
         })
         .await;
 
-        let _ = peripheral.unsubscribe(&response_char).await;
+        let _ = peripheral.unsubscribe(response_char).await;
         let _ = peripheral.disconnect().await;
 
         match result {
             Ok(Ok(data)) => {
                 info!("Response received, verifying...");
-                self.verify_response(&challenge, sequence, &data).await
+                self.verify_response(&device.device_info.device_hash, &challenge, &data)
+                    .await
             }
-            _ => {
+            Ok(Err(e)) => {
+                warn!("Challenge failed: {}", e);
+                Ok(false)
+            }
+            Err(_) => {
                 warn!("Challenge timeout");
                 Ok(false)
             }
@@ -106,33 +111,31 @@ impl ChallengeRunner {
 
     async fn verify_response(
         &self,
+        device_hash: &[u8; 8],
         challenge: &[u8; 32],
-        sequence: u32,
         response_data: &[u8],
     ) -> Result<bool> {
         let resp: protocol::ChallengeResponse = protocol::deserialize(response_data)?;
 
-        if resp.sequence != sequence {
-            return Ok(false);
-        }
-
-        let ctx = self.ctx.lock().await;
-        let device_key = ctx.device_store.all_devices().first().map(|d| d.public_key);
+        let mut ctx = self.ctx.lock().await;
+        let device_key = ctx.device_store.get_by_hash(device_hash).copied();
 
         let pk = match device_key {
             Some(key) => PublicKey::from_bytes(key)?,
             None => return Ok(false),
         };
 
-        let mut message = Vec::with_capacity(36);
-        message.extend_from_slice(challenge);
-        message.extend_from_slice(&sequence.to_be_bytes());
-
-        let sig = shadowgate_core::crypto::SignatureBytes {
+        let sig = SignatureBytes {
             bytes: resp.signature.clone(),
         };
+        let valid = pk
+            .verify(challenge, &sig)
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-        pk.verify(&message, &sig)
-            .map_err(|e| anyhow::anyhow!("{}", e))
+        if valid {
+            ctx.device_store.mark_authenticated(device_hash);
+        }
+
+        Ok(valid)
     }
 }

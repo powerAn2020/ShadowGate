@@ -42,6 +42,9 @@ object NativeCrypto {
     /** 生成 Ed25519 密钥对，返回 32 字节私钥种子 */
     external fun generateKeyPair(): ByteArray
 
+    /** 从 32 字节私钥种子推导 32 字节 Ed25519 公钥 */
+    external fun getPublicKeyFromSeed(seed: ByteArray): ByteArray
+
     /** 用私钥种子签名消息 */
     external fun sign(seed: ByteArray, message: ByteArray): ByteArray
 
@@ -132,13 +135,7 @@ class KeyManager(private val context: android.content.Context) {
      * 从私钥种子推导公钥
      */
     private fun derivePublicKey(seed: ByteArray): ByteArray {
-        // 用签名一个空消息来验证密钥，然后从 verify 获取公钥
-        // 简化: 实际应从 Rust 层直接导出公钥
-        val dummyMessage = "shadowgate_key_check".toByteArray()
-        val sig = NativeCrypto.sign(seed, dummyMessage)
-        // 公钥需要从 seed 推导，这里简化处理
-        // 正式实现应在 Rust 层添加 get_public_key_from_seed 函数
-        return seed  // placeholder
+        return NativeCrypto.getPublicKeyFromSeed(seed)
     }
 
     private fun bytesToHex(bytes: ByteArray): String {

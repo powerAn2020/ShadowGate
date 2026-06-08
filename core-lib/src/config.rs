@@ -69,10 +69,10 @@ impl ShadowGateConfig {
     pub fn default_config() -> Self {
         ShadowGateConfig {
             ble: BleConfig {
-                service_uuid: "0000shadow-0000-1000-8000-00805f9b34fb".to_string(),
-                characteristic_challenge_uuid: "0000chall-0000-1000-8000-00805f9b34fb".to_string(),
-                characteristic_response_uuid: "0000resp-0000-1000-8000-00805f9b34fb".to_string(),
-                characteristic_device_id_uuid: "0000devid-0000-1000-8000-00805f9b34fb".to_string(),
+                service_uuid: "7f4d0001-7d6a-4f8f-9a7d-4f1f68b0f001".to_string(),
+                characteristic_challenge_uuid: "7f4d0002-7d6a-4f8f-9a7d-4f1f68b0f001".to_string(),
+                characteristic_response_uuid: "7f4d0003-7d6a-4f8f-9a7d-4f1f68b0f001".to_string(),
+                characteristic_device_id_uuid: "7f4d0004-7d6a-4f8f-9a7d-4f1f68b0f001".to_string(),
             },
             rssi: RssiConfig {
                 unlock_threshold_dbm: -60,
