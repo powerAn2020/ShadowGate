@@ -137,6 +137,7 @@ fun ShadowGateTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun ShadowGateScreen(
     onToggleService: (Boolean) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
