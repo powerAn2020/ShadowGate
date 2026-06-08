@@ -65,7 +65,10 @@ fn get_devices() -> Vec<DeviceInfo> {
 #[tauri::command]
 fn pair_device(qr_content: String) -> Result<String, String> {
     // 解析 QR 码中的公钥信息，保存到信任存储
-    Ok(format!("Device paired: {}", &qr_content[..qr_content.len().min(20)]))
+    Ok(format!(
+        "Device paired: {}",
+        &qr_content[..qr_content.len().min(20)]
+    ))
 }
 
 /// 取消配对设备
@@ -90,8 +93,8 @@ fn get_config() -> DaemonConfig {
 #[tauri::command]
 fn update_config(config_json: String) -> Result<String, String> {
     // 解析并保存配置
-    let _config: DaemonConfig = serde_json::from_str(&config_json)
-        .map_err(|e| format!("Invalid config: {}", e))?;
+    let _config: DaemonConfig =
+        serde_json::from_str(&config_json).map_err(|e| format!("Invalid config: {}", e))?;
     Ok("Config updated".to_string())
 }
 
@@ -133,4 +136,9 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running ShadowGate UI");
+}
+
+#[cfg(not(mobile))]
+fn main() {
+    run();
 }
