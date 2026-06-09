@@ -27,6 +27,12 @@ tauri-ui/src-tauri/gen/
 tauri-ui/src-tauri/bin/*.exe
 tauri-ui/dist/
 
+# Credential Provider
+credential-provider/ShadowGa.*/
+credential-provider/x64/
+credential-provider/**/*.dll
+credential-provider/**/*.lib
+
 # OS
 .DS_Store
 Thumbs.db

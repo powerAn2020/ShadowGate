@@ -241,9 +241,10 @@ async fn handle_request(runtime: Arc<Mutex<DaemonRuntime>>, request: IpcRequest)
         }
         "credential_status" => {
             let runtime = runtime.lock().await;
+            let auth_file = credential_status_path(&runtime.log_path);
             Ok(json!({
-                "ready": credential_status_path(&runtime.log_path).exists(),
-                "auth_file": credential_status_path(&runtime.log_path),
+                "ready": credential_authorization_ready(&auth_file),
+                "auth_file": auth_file,
             }))
         }
         other => Err(anyhow::anyhow!("unknown command: {other}")),
@@ -251,7 +252,7 @@ async fn handle_request(runtime: Arc<Mutex<DaemonRuntime>>, request: IpcRequest)
 }
 
 async fn status(runtime: Arc<Mutex<DaemonRuntime>>) -> Result<Value> {
-    let (ctx, state, uptime_seconds, trusted_device_count) = {
+    let (ctx, state, uptime_seconds, trusted_device_count, credential_ready) = {
         let mut runtime = runtime.lock().await;
         if runtime
             .scan_task
@@ -273,6 +274,7 @@ async fn status(runtime: Arc<Mutex<DaemonRuntime>>) -> Result<Value> {
             .to_string(),
             runtime.started_at.elapsed().as_secs(),
             runtime.device_store.count(),
+            credential_authorization_ready(&credential_status_path(&runtime.log_path)),
         )
     };
 
@@ -293,7 +295,7 @@ async fn status(runtime: Arc<Mutex<DaemonRuntime>>) -> Result<Value> {
         rssi,
         device_name,
         trusted_device_count,
-        credential_ready: false,
+        credential_ready,
     }))
 }
 
@@ -442,6 +444,26 @@ fn credential_status_path(log_path: &Path) -> PathBuf {
         .and_then(Path::parent)
         .unwrap_or_else(|| Path::new("."))
         .join("credential_auth.json")
+}
+
+fn credential_authorization_ready(path: &Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(&content) else {
+        return false;
+    };
+    let Some(authorized_until_ms) = value.get("authorized_until_ms").and_then(Value::as_u64) else {
+        return false;
+    };
+    authorized_until_ms > unix_millis()
+}
+
+fn unix_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 fn unix_seconds() -> u64 {

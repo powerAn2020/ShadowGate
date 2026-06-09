@@ -7,6 +7,7 @@ on:
       - 'tauri-ui/**'
       - 'pc-daemon/**'
       - 'core-lib/**'
+      - 'credential-provider/**'
       - 'config/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -17,6 +18,7 @@ on:
       - 'tauri-ui/**'
       - 'pc-daemon/**'
       - 'core-lib/**'
+      - 'credential-provider/**'
       - 'config/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -41,6 +43,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -59,6 +64,9 @@ jobs:
           New-Item -ItemType Directory -Force tauri-ui/src-tauri/bin | Out-Null
           Copy-Item target/release/shadowgate-daemon.exe tauri-ui/src-tauri/bin/shadowgate-daemon-x86_64-pc-windows-msvc.exe
 
+      - name: Build Credential Provider
+        run: msbuild credential-provider/ShadowGateCredentialProvider.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+
       - name: Build Tauri
         working-directory: tauri-ui
         run: npx tauri build
@@ -72,4 +80,5 @@ jobs:
           path: |
             tauri-ui/src-tauri/target/release/bundle/msi/*.msi
             tauri-ui/src-tauri/target/release/bundle/nsis/*.exe
+            credential-provider/x64/Release/ShadowGateCredentialProvider.dll
           retention-days: 30

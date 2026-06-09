@@ -139,6 +139,16 @@
             oninput="updateSliderLabel('cfgConfirm', 'cfgConfirmVal', 'ms')" />
         </div>
         <button class="btn-secondary" onclick="saveConfig()">Save Configuration</button>
+        <div class="credential-box">
+          <div class="credential-head">
+            <span>Credential Provider</span>
+            <strong id="windowsCredentialState">Checking</strong>
+          </div>
+          <input type="text" class="config-input" id="credDomain" autocomplete="organization" placeholder="Domain (optional)" />
+          <input type="text" class="config-input" id="credUsername" autocomplete="username" placeholder="Windows username" />
+          <input type="password" class="config-input" id="credPassword" autocomplete="current-password" placeholder="Windows password" />
+          <button class="btn-secondary" onclick="saveWindowsCredential()">Save Windows Credential</button>
+        </div>
       </section>
 
       <!-- Logs Tab -->

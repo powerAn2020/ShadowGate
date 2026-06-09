@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_shell::{process::CommandChild, ShellExt};
 
 const PIPE_NAME: &str = r"\\.\pipe\shadowgate-daemon-v1";
+const CREDENTIAL_TARGET: &str = "ShadowGate:WindowsUnlock";
 
 struct AppState {
     daemon_child: Option<CommandChild>,
@@ -139,7 +140,12 @@ fn ensure_daemon(app: &AppHandle, state: &State<Mutex<AppState>>) -> Result<(), 
 fn get_status(app: AppHandle, state: State<Mutex<AppState>>) -> AppStatus {
     let _ = ensure_daemon(&app, &state);
     match ipc_request("status", Value::Null) {
-        Ok(value) => serde_json::from_value(value).unwrap_or_else(|_| offline_status()),
+        Ok(value) => {
+            let mut status: AppStatus =
+                serde_json::from_value(value).unwrap_or_else(|_| offline_status());
+            status.credential_ready = status.credential_ready && windows_credential_available();
+            status
+        }
         Err(_) => offline_status(),
     }
 }
@@ -243,7 +249,30 @@ fn toggle_daemon(app: AppHandle, state: State<Mutex<AppState>>) -> Result<bool, 
 #[tauri::command]
 fn credential_status(app: AppHandle, state: State<Mutex<AppState>>) -> Value {
     let _ = ensure_daemon(&app, &state);
-    ipc_request("credential_status", Value::Null).unwrap_or_else(|_| json!({ "ready": false }))
+    let daemon = ipc_request("credential_status", Value::Null)
+        .unwrap_or_else(|_| json!({ "ready": false }));
+    json!({
+        "daemon_authorization": daemon,
+        "windows_credential": windows_credential_available(),
+    })
+}
+
+#[tauri::command]
+fn windows_credential_status() -> Value {
+    json!({
+        "target": CREDENTIAL_TARGET,
+        "available": windows_credential_available(),
+    })
+}
+
+#[tauri::command]
+fn save_windows_credential(
+    username: String,
+    domain: String,
+    password: String,
+) -> Result<String, String> {
+    write_windows_credential(&username, &domain, &password)?;
+    Ok("Windows credential saved".to_string())
 }
 
 fn offline_status() -> AppStatus {
@@ -286,6 +315,8 @@ pub fn run() {
             get_logs,
             toggle_daemon,
             credential_status,
+            windows_credential_status,
+            save_windows_credential,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ShadowGate UI");
@@ -294,4 +325,98 @@ pub fn run() {
 #[cfg(not(mobile))]
 fn main() {
     run();
+}
+
+#[cfg(windows)]
+fn to_wide(value: &str) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    std::ffi::OsStr::new(value)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
+}
+
+#[cfg(windows)]
+fn normalized_username(username: &str, domain: &str) -> String {
+    let username = username.trim();
+    let domain = domain.trim();
+    if domain.is_empty() || username.contains('\\') || username.contains('@') {
+        username.to_string()
+    } else {
+        format!("{domain}\\{username}")
+    }
+}
+
+#[cfg(windows)]
+fn windows_credential_available() -> bool {
+    use windows_sys::Win32::Security::Credentials::{
+        CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC,
+    };
+
+    let target = to_wide(CREDENTIAL_TARGET);
+    let mut credential: *mut CREDENTIALW = std::ptr::null_mut();
+    let ok = unsafe { CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut credential) } != 0;
+    if ok && !credential.is_null() {
+        unsafe { CredFree(credential.cast()) };
+    }
+    ok
+}
+
+#[cfg(not(windows))]
+fn windows_credential_available() -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn write_windows_credential(username: &str, domain: &str, password: &str) -> Result<(), String> {
+    use windows_sys::Win32::Foundation::FILETIME;
+    use windows_sys::Win32::Security::Credentials::{
+        CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
+    };
+
+    let account = normalized_username(username, domain);
+    if account.trim().is_empty() {
+        return Err("username is required".to_string());
+    }
+    if password.is_empty() {
+        return Err("password is required".to_string());
+    }
+
+    let mut target = to_wide(CREDENTIAL_TARGET);
+    let mut user = to_wide(&account);
+    let mut comment = to_wide("ShadowGate unlock credential");
+    let mut secret = to_wide(password);
+
+    let mut credential = CREDENTIALW {
+        Flags: 0,
+        Type: CRED_TYPE_GENERIC,
+        TargetName: target.as_mut_ptr(),
+        Comment: comment.as_mut_ptr(),
+        LastWritten: FILETIME {
+            dwLowDateTime: 0,
+            dwHighDateTime: 0,
+        },
+        CredentialBlobSize: (secret.len() * std::mem::size_of::<u16>()) as u32,
+        CredentialBlob: secret.as_mut_ptr().cast(),
+        Persist: CRED_PERSIST_LOCAL_MACHINE,
+        AttributeCount: 0,
+        Attributes: std::ptr::null_mut(),
+        TargetAlias: std::ptr::null_mut(),
+        UserName: user.as_mut_ptr(),
+    };
+
+    let ok = unsafe { CredWriteW(&mut credential, 0) } != 0;
+    if ok {
+        Ok(())
+    } else {
+        Err(format!(
+            "CredWriteW failed: {}",
+            std::io::Error::last_os_error()
+        ))
+    }
+}
+
+#[cfg(not(windows))]
+fn write_windows_credential(_username: &str, _domain: &str, _password: &str) -> Result<(), String> {
+    Err("Windows Credential Manager is only available on Windows".to_string())
 }

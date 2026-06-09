@@ -434,6 +434,36 @@ body {
   font-size: 12px;
 }
 
+.credential-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.credential-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.credential-head strong {
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.credential-head strong.ready {
+  color: var(--success);
+}
+
+.credential-head strong.missing {
+  color: var(--danger);
+}
+
 .config-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;

@@ -23,6 +23,10 @@ function mockResponse(cmd) {
       return { service_uuid: '7f4d0001-7d6a-4f8f-9a7d-4f1f68b0f001', unlock_threshold: -60, lock_threshold: -80, scan_interval_ms: 1000, challenge_timeout_ms: 1500, lock_confirmation_ms: 5000, unlock_method: 'credential_provider' };
     case 'get_logs':
       return ['[12:00:01] ShadowGate daemon started', '[12:00:02] BLE adapter initialized (Intel AX210)', '[12:00:03] Loaded 1 trusted device(s)', '[12:00:05] BLE scan started (filter: 7f4d0001...)'];
+    case 'windows_credential_status':
+      return { target: 'ShadowGate:WindowsUnlock', available: false };
+    case 'save_windows_credential':
+      return 'Windows credential saved';
     case 'toggle_daemon':
       return true;
     case 'pair_device':
@@ -49,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStatus();
   loadDevices();
   loadConfig();
+  loadWindowsCredentialStatus();
   startAutoRefresh();
 });
 
@@ -65,6 +70,7 @@ function initTabs() {
 
       // Refresh content when switching tabs
       if (target === 'devices') loadDevices();
+      if (target === 'config') loadWindowsCredentialStatus();
       if (target === 'logs') refreshLogs();
     });
   });
@@ -269,6 +275,42 @@ async function saveConfig() {
   } catch (e) {
     console.error('Failed to save config:', e);
     alert('Failed to save configuration: ' + e);
+  }
+}
+
+async function loadWindowsCredentialStatus() {
+  try {
+    const status = await tauriInvoke('windows_credential_status');
+    const el = document.getElementById('windowsCredentialState');
+    if (!el) return;
+    el.textContent = status.available ? 'Ready' : 'Missing';
+    el.className = status.available ? 'ready' : 'missing';
+  } catch (e) {
+    const el = document.getElementById('windowsCredentialState');
+    if (el) {
+      el.textContent = 'Unavailable';
+      el.className = 'missing';
+    }
+  }
+}
+
+async function saveWindowsCredential() {
+  const domain = document.getElementById('credDomain').value.trim();
+  const username = document.getElementById('credUsername').value.trim();
+  const password = document.getElementById('credPassword').value;
+  if (!username || !password) {
+    showToast('Username and password are required');
+    return;
+  }
+
+  try {
+    await tauriInvoke('save_windows_credential', { username, domain, password });
+    document.getElementById('credPassword').value = '';
+    showToast('Windows credential saved');
+    loadWindowsCredentialStatus();
+  } catch (e) {
+    console.error('Failed to save Windows credential:', e);
+    alert('Failed to save Windows credential: ' + e);
   }
 }
 

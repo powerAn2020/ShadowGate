@@ -122,6 +122,37 @@ npm install
 npm run tauri dev
 ```
 
+### 本地构建 Windows 桌面端
+
+Tauri 打包时需要 `pc-daemon` 作为 sidecar。先生成并复制 sidecar，再构建桌面安装包：
+
+```powershell
+cargo build --release -p shadowgate-pc-daemon
+New-Item -ItemType Directory -Force tauri-ui/src-tauri/bin | Out-Null
+Copy-Item target/release/shadowgate-daemon.exe tauri-ui/src-tauri/bin/shadowgate-daemon-x86_64-pc-windows-msvc.exe -Force
+cd tauri-ui
+npm run build -- --no-sign
+```
+
+Tauri 会通过 named pipe `\\.\pipe\shadowgate-daemon-v1` 与 sidecar 通信。桌面 UI 中的 Credential Provider 设置会把 Windows 解锁凭据写入 Windows Credential Manager，target 固定为 `ShadowGate:WindowsUnlock`，不会写入普通 JSON 配置文件。
+
+### 构建/安装 Credential Provider
+
+Credential Provider 是 x64 C++ COM DLL，仅建议在 Windows 10/11 测试机上以管理员权限注册：
+
+```powershell
+& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.exe" credential-provider/ShadowGateCredentialProvider.vcxproj /p:Configuration=Release /p:Platform=x64
+powershell -ExecutionPolicy Bypass -File credential-provider/register.ps1 -DllPath credential-provider/x64/Release/ShadowGateCredentialProvider.dll
+```
+
+卸载：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File credential-provider/unregister.ps1 -DllPath credential-provider/x64/Release/ShadowGateCredentialProvider.dll
+```
+
+v1 目标是“已登录会话锁定后的 BLE 解锁”。Provider 只有在 `%ProgramData%\ShadowGate\credential_auth.json` 中存在未过期 BLE 授权，且 Credential Manager 中存在 `ShadowGate:WindowsUnlock` 凭据时才会提交解锁凭据；其余情况均 fail closed。
+
 ### 构建 Android APK
 
 ```bash
