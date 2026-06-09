@@ -1,15 +1,28 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! ShadowGate Tauri 配置 UI — 后端
-//!
-//! 提供 IPC 命令供前端调用，通过本地命名管道与 pc-daemon 通信。
+//! ShadowGate Tauri configuration UI backend.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use serde_json::{json, Value};
+use std::io::{BufRead, BufReader, Write};
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
+use tauri_plugin_shell::{process::CommandChild, ShellExt};
 
-/// 前端状态结构
+const PIPE_NAME: &str = r"\\.\pipe\shadowgate-daemon-v1";
+
+struct AppState {
+    daemon_child: Option<CommandChild>,
+}
+
+impl Drop for AppState {
+    fn drop(&mut self) {
+        if let Some(child) = self.daemon_child.take() {
+            let _ = child.kill();
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppStatus {
     pub state: String,
@@ -17,6 +30,8 @@ pub struct AppStatus {
     pub device_name: Option<String>,
     pub uptime_seconds: u64,
     pub daemon_available: bool,
+    pub trusted_device_count: usize,
+    pub credential_ready: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,281 +45,247 @@ pub struct DeviceInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DaemonConfig {
+    pub service_uuid: String,
     pub unlock_threshold: i32,
     pub lock_threshold: i32,
     pub scan_interval_ms: u64,
     pub challenge_timeout_ms: u64,
     pub lock_confirmation_ms: u64,
+    pub unlock_method: String,
 }
 
-/// 应用内部状态
-struct AppState {
-    daemon_running: bool,
-    start_time: std::time::Instant,
-    data_dir: PathBuf,
-    devices: Vec<DeviceInfo>,
-    config: DaemonConfig,
-    logs: Vec<String>,
+#[derive(Debug, Deserialize)]
+struct IpcEnvelope {
+    ok: bool,
+    data: Option<Value>,
+    error: Option<String>,
 }
 
-impl AppState {
-    fn new() -> Self {
-        let data_dir = app_data_dir();
-        let config = load_json(&data_dir.join("ui-config.json")).unwrap_or_else(default_config);
-        let devices = load_json(&data_dir.join("trusted-devices-ui.json")).unwrap_or_default();
-        let mut state = AppState {
-            daemon_running: false,
-            start_time: std::time::Instant::now(),
-            data_dir,
-            devices,
-            config,
-            logs: Vec::new(),
-        };
-        state.push_log("UI initialized");
-        state.push_log("pc-daemon IPC is not connected yet");
-        state
-    }
+#[derive(Debug, Deserialize)]
+struct DaemonDevice {
+    device_hash: String,
+    name: String,
+    public_key_hex: String,
+    paired_at: u64,
+    last_auth_at: Option<u64>,
+}
 
-    fn push_log(&mut self, message: impl AsRef<str>) {
-        let secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        self.logs.push(format!("[{}] {}", secs, message.as_ref()));
-        if self.logs.len() > 200 {
-            let overflow = self.logs.len() - 200;
-            self.logs.drain(0..overflow);
+fn ipc_request(cmd: &str, payload: Value) -> Result<Value, String> {
+    #[cfg(windows)]
+    {
+        let mut pipe = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(PIPE_NAME)
+            .map_err(|e| format!("daemon unavailable: {e}"))?;
+        let request = json!({ "cmd": cmd, "payload": payload });
+        let mut request_text = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        request_text.push('\n');
+        pipe.write_all(request_text.as_bytes())
+            .map_err(|e| e.to_string())?;
+        pipe.flush().map_err(|e| e.to_string())?;
+
+        let mut response = String::new();
+        let mut reader = BufReader::new(pipe);
+        reader.read_line(&mut response).map_err(|e| e.to_string())?;
+        let envelope: IpcEnvelope = serde_json::from_str(&response).map_err(|e| e.to_string())?;
+        if envelope.ok {
+            Ok(envelope.data.unwrap_or(Value::Null))
+        } else {
+            Err(envelope.error.unwrap_or_else(|| "daemon error".to_string()))
         }
     }
 
-    fn save_config(&self) -> Result<(), String> {
-        save_json(&self.data_dir.join("ui-config.json"), &self.config)
-    }
-
-    fn save_devices(&self) -> Result<(), String> {
-        save_json(
-            &self.data_dir.join("trusted-devices-ui.json"),
-            &self.devices,
-        )
+    #[cfg(not(windows))]
+    {
+        let _ = (cmd, payload);
+        Err("daemon IPC is only available on Windows".to_string())
     }
 }
 
-fn app_data_dir() -> PathBuf {
-    let base = std::env::var("APPDATA")
-        .map(PathBuf::from)
-        .or_else(|_| std::env::var("XDG_CONFIG_HOME").map(PathBuf::from))
-        .unwrap_or_else(|_| {
-            std::env::var("HOME")
-                .map(|home| PathBuf::from(home).join(".config"))
-                .unwrap_or_else(|_| PathBuf::from("."))
-        });
-    let dir = base.join("ShadowGate");
-    let _ = std::fs::create_dir_all(&dir);
-    dir
-}
-
-fn load_json<T: for<'de> Deserialize<'de>>(path: &std::path::Path) -> Option<T> {
-    let content = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&content).ok()
-}
-
-fn save_json<T: Serialize>(path: &std::path::Path, value: &T) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+fn ensure_daemon(app: &AppHandle, state: &State<Mutex<AppState>>) -> Result<(), String> {
+    if state.lock().unwrap().daemon_child.is_some() {
+        return Ok(());
     }
-    let content = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
-    std::fs::write(path, content).map_err(|e| e.to_string())
+
+    let child = match app.shell().sidecar("shadowgate-daemon") {
+        Ok(command) => {
+            let (_rx, child) = command.spawn().map_err(|e| e.to_string())?;
+            child
+        }
+        Err(sidecar_error) => {
+            let dev_path = app
+                .path()
+                .resolve(
+                    "../../target/release/shadowgate-daemon.exe",
+                    tauri::path::BaseDirectory::Resource,
+                )
+                .map_err(|e| format!("{sidecar_error}; dev path resolve failed: {e}"))?;
+            let (_rx, child) = app
+                .shell()
+                .command(dev_path)
+                .spawn()
+                .map_err(|e| format!("{sidecar_error}; dev spawn failed: {e}"))?;
+            child
+        }
+    };
+
+    state.lock().unwrap().daemon_child = Some(child);
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    Ok(())
+}
+
+#[tauri::command]
+fn get_status(app: AppHandle, state: State<Mutex<AppState>>) -> AppStatus {
+    let _ = ensure_daemon(&app, &state);
+    match ipc_request("status", Value::Null) {
+        Ok(value) => serde_json::from_value(value).unwrap_or_else(|_| offline_status()),
+        Err(_) => offline_status(),
+    }
+}
+
+#[tauri::command]
+fn get_devices(app: AppHandle, state: State<Mutex<AppState>>) -> Vec<DeviceInfo> {
+    let _ = ensure_daemon(&app, &state);
+    ipc_request("list_devices", Value::Null)
+        .ok()
+        .and_then(|value| serde_json::from_value::<Vec<DaemonDevice>>(value).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|device| DeviceInfo {
+            name: device.name,
+            hash: device.device_hash,
+            paired_at: device.paired_at.to_string(),
+            last_auth: device.last_auth_at.map(|ts| ts.to_string()),
+            public_key: device.public_key_hex,
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn begin_pairing(app: AppHandle, state: State<Mutex<AppState>>) -> Result<String, String> {
+    ensure_daemon(&app, &state)?;
+    let payload = ipc_request("begin_pairing", Value::Null)?;
+    serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn pair_device(
+    qr_content: String,
+    app: AppHandle,
+    state: State<Mutex<AppState>>,
+) -> Result<String, String> {
+    ensure_daemon(&app, &state)?;
+    let payload: Value = serde_json::from_str(qr_content.trim())
+        .map_err(|e| format!("Expected Android pairing JSON: {e}"))?;
+    ipc_request("finish_pairing", payload)?;
+    Ok("Device paired".to_string())
+}
+
+#[tauri::command]
+fn unpair_device(
+    hash: String,
+    app: AppHandle,
+    state: State<Mutex<AppState>>,
+) -> Result<String, String> {
+    ensure_daemon(&app, &state)?;
+    ipc_request("unpair_device", json!({ "device_hash": hash }))?;
+    Ok("Device unpaired".to_string())
+}
+
+#[tauri::command]
+fn get_config(app: AppHandle, state: State<Mutex<AppState>>) -> DaemonConfig {
+    let _ = ensure_daemon(&app, &state);
+    ipc_request("get_config", Value::Null)
+        .ok()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_else(default_config)
+}
+
+#[tauri::command]
+fn update_config(
+    config_json: String,
+    app: AppHandle,
+    state: State<Mutex<AppState>>,
+) -> Result<String, String> {
+    ensure_daemon(&app, &state)?;
+    let payload: Value =
+        serde_json::from_str(&config_json).map_err(|e| format!("Invalid config: {e}"))?;
+    ipc_request("set_config", payload)?;
+    Ok("Config updated".to_string())
+}
+
+#[tauri::command]
+fn get_logs(app: AppHandle, state: State<Mutex<AppState>>) -> Vec<String> {
+    let _ = ensure_daemon(&app, &state);
+    ipc_request("logs_tail", Value::Null)
+        .ok()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_else(|| vec!["daemon offline".to_string()])
+}
+
+#[tauri::command]
+fn toggle_daemon(app: AppHandle, state: State<Mutex<AppState>>) -> Result<bool, String> {
+    ensure_daemon(&app, &state)?;
+    let status: AppStatus = ipc_request("status", Value::Null)
+        .ok()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_else(offline_status);
+    if status.state == "IDLE" {
+        ipc_request("start_scan", Value::Null)?;
+        Ok(true)
+    } else {
+        ipc_request("stop_scan", Value::Null)?;
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+fn credential_status(app: AppHandle, state: State<Mutex<AppState>>) -> Value {
+    let _ = ensure_daemon(&app, &state);
+    ipc_request("credential_status", Value::Null).unwrap_or_else(|_| json!({ "ready": false }))
+}
+
+fn offline_status() -> AppStatus {
+    AppStatus {
+        state: "OFFLINE".to_string(),
+        rssi: None,
+        device_name: None,
+        uptime_seconds: 0,
+        daemon_available: false,
+        trusted_device_count: 0,
+        credential_ready: false,
+    }
 }
 
 fn default_config() -> DaemonConfig {
     DaemonConfig {
+        service_uuid: "7f4d0001-7d6a-4f8f-9a7d-4f1f68b0f001".to_string(),
         unlock_threshold: -60,
         lock_threshold: -80,
         scan_interval_ms: 1000,
         challenge_timeout_ms: 1500,
         lock_confirmation_ms: 5000,
+        unlock_method: "credential_provider".to_string(),
     }
-}
-
-fn unix_time_string() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        .to_string()
-}
-
-fn derive_short_hash(input: &str) -> String {
-    let mut hash = 0xcbf29ce484222325u64;
-    for byte in input.bytes() {
-        hash ^= byte as u64;
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    format!("{hash:016x}")
-}
-
-fn parse_device(qr_content: &str) -> DeviceInfo {
-    #[derive(Deserialize)]
-    struct PairPayload {
-        name: Option<String>,
-        device_name: Option<String>,
-        hash: Option<String>,
-        device_hash: Option<String>,
-        public_key: Option<String>,
-        public_key_hex: Option<String>,
-    }
-
-    if let Ok(payload) = serde_json::from_str::<PairPayload>(qr_content) {
-        let public_key = payload
-            .public_key
-            .or(payload.public_key_hex)
-            .unwrap_or_else(|| qr_content.to_string());
-        let hash = payload
-            .hash
-            .or(payload.device_hash)
-            .unwrap_or_else(|| derive_short_hash(&public_key));
-        return DeviceInfo {
-            name: payload
-                .name
-                .or(payload.device_name)
-                .unwrap_or_else(|| "Android Credential".to_string()),
-            hash,
-            paired_at: unix_time_string(),
-            last_auth: None,
-            public_key,
-        };
-    }
-
-    DeviceInfo {
-        name: "Android Credential".to_string(),
-        hash: derive_short_hash(qr_content),
-        paired_at: unix_time_string(),
-        last_auth: None,
-        public_key: qr_content.to_string(),
-    }
-}
-
-/// 获取当前状态
-#[tauri::command]
-fn get_status(state: State<Mutex<AppState>>) -> AppStatus {
-    let state = state.lock().unwrap();
-    AppStatus {
-        state: if state.daemon_running {
-            "SCANNING".to_string()
-        } else {
-            "IDLE".to_string()
-        },
-        rssi: None,
-        device_name: None,
-        uptime_seconds: state.start_time.elapsed().as_secs(),
-        daemon_available: false,
-    }
-}
-
-/// 获取配对设备列表
-#[tauri::command]
-fn get_devices(state: State<Mutex<AppState>>) -> Vec<DeviceInfo> {
-    state.lock().unwrap().devices.clone()
-}
-
-/// 配对设备 (从 QR 码内容)
-#[tauri::command]
-fn pair_device(qr_content: String, state: State<Mutex<AppState>>) -> Result<String, String> {
-    if qr_content.trim().is_empty() {
-        return Err("QR content is empty".to_string());
-    }
-
-    let mut state = state.lock().unwrap();
-    let device = parse_device(qr_content.trim());
-    if let Some(existing) = state.devices.iter_mut().find(|d| d.hash == device.hash) {
-        existing.name = device.name;
-        existing.public_key = device.public_key;
-        existing.paired_at = device.paired_at;
-        let hash = existing.hash.clone();
-        state.push_log(format!("Updated paired device {}", hash));
-        state.save_devices()?;
-        return Ok(format!("Device updated: {}", hash));
-    }
-
-    let hash = device.hash.clone();
-    state.devices.push(device);
-    state.push_log(format!("Paired device {}", hash));
-    state.save_devices()?;
-    Ok(format!("Device paired: {}", hash))
-}
-
-/// 取消配对设备
-#[tauri::command]
-fn unpair_device(hash: String, state: State<Mutex<AppState>>) -> Result<String, String> {
-    let mut state = state.lock().unwrap();
-    let before = state.devices.len();
-    state.devices.retain(|device| device.hash != hash);
-    if state.devices.len() == before {
-        return Err(format!("Device not found: {}", hash));
-    }
-    state.push_log(format!("Unpaired device {}", hash));
-    state.save_devices()?;
-    Ok(format!("Device unpaired: {}", hash))
-}
-
-/// 获取当前配置
-#[tauri::command]
-fn get_config(state: State<Mutex<AppState>>) -> DaemonConfig {
-    state.lock().unwrap().config.clone()
-}
-
-/// 更新配置
-#[tauri::command]
-fn update_config(config_json: String, state: State<Mutex<AppState>>) -> Result<String, String> {
-    let config: DaemonConfig =
-        serde_json::from_str(&config_json).map_err(|e| format!("Invalid config: {}", e))?;
-    if config.unlock_threshold <= config.lock_threshold {
-        return Err("Unlock threshold must be greater than lock threshold".to_string());
-    }
-    if config.scan_interval_ms == 0 || config.challenge_timeout_ms == 0 {
-        return Err("Intervals and timeouts must be greater than zero".to_string());
-    }
-
-    let mut state = state.lock().unwrap();
-    state.config = config;
-    state.save_config()?;
-    state.push_log("Configuration saved");
-    Ok("Config updated".to_string())
-}
-
-/// 获取日志
-#[tauri::command]
-fn get_logs(state: State<Mutex<AppState>>) -> Vec<String> {
-    state.lock().unwrap().logs.clone()
-}
-
-/// 启动/停止 daemon
-#[tauri::command]
-fn toggle_daemon(state: State<Mutex<AppState>>) -> bool {
-    let mut state = state.lock().unwrap();
-    state.daemon_running = !state.daemon_running;
-    if state.daemon_running {
-        state.push_log("UI monitoring enabled; daemon IPC pending");
-    } else {
-        state.push_log("UI monitoring stopped");
-    }
-    state.daemon_running
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(Mutex::new(AppState::new()))
+        .manage(Mutex::new(AppState { daemon_child: None }))
         .invoke_handler(tauri::generate_handler![
             get_status,
             get_devices,
+            begin_pairing,
             pair_device,
             unpair_device,
             get_config,
             update_config,
             get_logs,
             toggle_daemon,
+            credential_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ShadowGate UI");

@@ -1,6 +1,7 @@
-/* ShadowGate Tauri UI — Dark Theme with Glassmorphism */
+/* ShadowGate Tauri UI */
 
-:root {
+:root,
+:root[data-theme="dark"] {
   --bg-primary: #0a0a0f;
   --bg-secondary: #14141f;
   --bg-card: rgba(20, 20, 40, 0.7);
@@ -12,6 +13,22 @@
   --success: #00cec9;
   --warning: #fdcb6e;
   --danger: #ff6b6b;
+  --radius: 12px;
+  --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:root[data-theme="light"] {
+  --bg-primary: #f6f7fb;
+  --bg-secondary: #e9edf5;
+  --bg-card: rgba(255, 255, 255, 0.86);
+  --border: rgba(20, 25, 40, 0.12);
+  --text-primary: #182033;
+  --text-secondary: #66708a;
+  --accent: #315efb;
+  --accent-glow: rgba(49, 94, 251, 0.22);
+  --success: #008f7a;
+  --warning: #a76700;
+  --danger: #d83a52;
   --radius: 12px;
   --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -47,6 +64,21 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 8px 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-select {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
 }
 
 .logo {
@@ -162,6 +194,27 @@ body {
   color: var(--text-secondary);
 }
 
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.status-grid > div {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.metric-label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
 /* Primary Button */
 .btn-primary {
   width: 100%;
@@ -259,6 +312,37 @@ body {
   opacity: 0.7;
 }
 
+.pairing-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pairing-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.pairing-box textarea {
+  min-height: 96px;
+  resize: vertical;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .device-item {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -338,6 +422,16 @@ body {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
   outline: none;
+}
+
+.config-input {
+  width: 100%;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
 }
 
 .config-slider::-webkit-slider-thumb {

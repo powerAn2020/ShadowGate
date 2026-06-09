@@ -5,11 +5,21 @@ on:
     branches: [main, master]
     paths:
       - 'tauri-ui/**'
+      - 'pc-daemon/**'
+      - 'core-lib/**'
+      - 'config/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/tauri-ci.yml'
   pull_request:
     branches: [main, master]
     paths:
       - 'tauri-ui/**'
+      - 'pc-daemon/**'
+      - 'core-lib/**'
+      - 'config/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/tauri-ci.yml'
   workflow_dispatch:
 
@@ -39,6 +49,15 @@ jobs:
       - name: Install npm dependencies
         working-directory: tauri-ui
         run: npm ci
+
+      - name: Build daemon sidecar
+        run: cargo build --release -p shadowgate-pc-daemon
+
+      - name: Prepare daemon sidecar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force tauri-ui/src-tauri/bin | Out-Null
+          Copy-Item target/release/shadowgate-daemon.exe tauri-ui/src-tauri/bin/shadowgate-daemon-x86_64-pc-windows-msvc.exe
 
       - name: Build Tauri
         working-directory: tauri-ui

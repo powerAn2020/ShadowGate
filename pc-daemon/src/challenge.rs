@@ -5,6 +5,7 @@ use btleplug::api::{CharPropFlags, Peripheral as _, WriteType};
 use futures::StreamExt;
 use log::{info, warn};
 use rand::RngCore;
+use serde_json::json;
 use shadowgate_core::crypto::{PublicKey, SignatureBytes};
 use shadowgate_core::protocol;
 use shadowgate_core::ShadowGateConfig;
@@ -14,6 +15,7 @@ use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
 use crate::ble_scanner::DiscoveredDevice;
+use crate::ipc::program_data_dir;
 use crate::state_machine::AppContext;
 
 pub struct ChallengeRunner {
@@ -134,8 +136,32 @@ impl ChallengeRunner {
 
         if valid {
             ctx.device_store.mark_authenticated(device_hash);
+            write_credential_authorization(device_hash, self.config.challenge.timeout_ms);
         }
 
         Ok(valid)
     }
+}
+
+fn write_credential_authorization(device_hash: &[u8; 8], challenge_timeout_ms: u64) {
+    let mut nonce = [0u8; 16];
+    rand::thread_rng().fill_bytes(&mut nonce);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let payload = json!({
+        "authorized_until_ms": now_ms + challenge_timeout_ms + 750,
+        "device_hash": hex::encode(device_hash),
+        "auth_nonce": hex::encode(nonce),
+    });
+
+    let path = program_data_dir().join("credential_auth.json");
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(
+        path,
+        serde_json::to_vec_pretty(&payload).unwrap_or_default(),
+    );
 }

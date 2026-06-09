@@ -1,6 +1,8 @@
 package com.shadowgate.app.ui
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,6 +14,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -25,8 +28,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.shadowgate.app.config.ShadowGateConfig
+import com.shadowgate.app.crypto.KeyManager
 import com.shadowgate.app.service.ShadowGateService
 import com.shadowgate.rootdaemon.RootShell
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
 
@@ -57,8 +62,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            ShadowGateTheme {
+            val prefs = remember { getSharedPreferences("shadowgate_config", Context.MODE_PRIVATE) }
+            var themeMode by remember { mutableStateOf(prefs.getString("theme_mode", "SYSTEM") ?: "SYSTEM") }
+
+            ShadowGateTheme(themeMode = themeMode) {
                 ShadowGateScreen(
+                    themeMode = themeMode,
                     onToggleService = { start ->
                         if (start) {
                             if (hasAllPermissions()) {
@@ -79,11 +88,20 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onConfigChanged = { txPower, advertiseInterval ->
-                        getSharedPreferences("shadowgate_config", Context.MODE_PRIVATE)
-                            .edit()
+                        prefs.edit()
                             .putString(ShadowGateService.PREF_TX_POWER, txPower)
                             .putInt(ShadowGateService.PREF_ADVERTISE_INTERVAL, advertiseInterval)
                             .apply()
+                    },
+                    onThemeChanged = { mode ->
+                        themeMode = mode
+                        prefs.edit().putString("theme_mode", mode).apply()
+                    },
+                    onCopyPairingJson = {
+                        val payload = buildPairingJson()
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("ShadowGate pairing", payload))
+                        Toast.makeText(this, "配对 JSON 已复制", Toast.LENGTH_SHORT).show()
                     }
                 )
             }
@@ -113,12 +131,35 @@ class MainActivity : ComponentActivity() {
         }
         startService(intent)
     }
+
+    private fun buildPairingJson(): String {
+        val keyManager = KeyManager(this)
+        if (keyManager.getSeed() == null) {
+            keyManager.generateAndStore()
+        }
+        val publicKey = keyManager.getPublicKey() ?: keyManager.generateAndStore().second
+        val deviceHash = keyManager.getOrCreateDeviceHash()
+        return JSONObject()
+            .put("device_hash", bytesToHex(deviceHash))
+            .put("public_key_hex", bytesToHex(publicKey))
+            .put("name", Build.MODEL)
+            .toString(2)
+    }
+
+    private fun bytesToHex(bytes: ByteArray): String {
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
 }
 
 // ===== Compose UI =====
 
 @Composable
-fun ShadowGateTheme(content: @Composable () -> Unit) {
+fun ShadowGateTheme(themeMode: String, content: @Composable () -> Unit) {
+    val dark = when (themeMode) {
+        "LIGHT" -> false
+        "DARK" -> true
+        else -> isSystemInDarkTheme()
+    }
     val darkColorScheme = darkColorScheme(
         primary = Color(0xFF6C5CE7),
         secondary = Color(0xFF00CEC9),
@@ -128,9 +169,18 @@ fun ShadowGateTheme(content: @Composable () -> Unit) {
         onBackground = Color(0xFFE8E8ED),
         onSurface = Color(0xFFE8E8ED),
     )
+    val lightColorScheme = lightColorScheme(
+        primary = Color(0xFF315EFB),
+        secondary = Color(0xFF008F7A),
+        background = Color(0xFFF6F7FB),
+        surface = Color.White,
+        onPrimary = Color.White,
+        onBackground = Color(0xFF182033),
+        onSurface = Color(0xFF182033),
+    )
 
     MaterialTheme(
-        colorScheme = darkColorScheme,
+        colorScheme = if (dark) darkColorScheme else lightColorScheme,
         typography = MaterialTheme.typography,
         content = content
     )
@@ -139,9 +189,12 @@ fun ShadowGateTheme(content: @Composable () -> Unit) {
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun ShadowGateScreen(
+    themeMode: String,
     onToggleService: (Boolean) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
-    onConfigChanged: (String, Int) -> Unit
+    onConfigChanged: (String, Int) -> Unit,
+    onThemeChanged: (String) -> Unit,
+    onCopyPairingJson: () -> Unit
 ) {
     var isServiceRunning by remember { mutableStateOf(false) }
     var txPower by remember { mutableStateOf(ShadowGateConfig.DEFAULT_TX_POWER) }
@@ -251,6 +304,24 @@ fun ShadowGateScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
+                    Text(
+                        text = "主题: $themeMode",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("SYSTEM", "LIGHT", "DARK").forEach { mode ->
+                            FilterChip(
+                                selected = themeMode == mode,
+                                onClick = { onThemeChanged(mode) },
+                                label = { Text(mode) }
+                            )
+                        }
+                    }
+
                     // TX Power
                     Text(
                         text = "发射功率: $txPower",
@@ -299,6 +370,17 @@ fun ShadowGateScreen(
             ) {
                 Text(
                     text = "禁用电池优化 (确保持续运行)",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                )
+            }
+
+            TextButton(
+                onClick = onCopyPairingJson,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "复制 Android 配对 JSON",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                 )

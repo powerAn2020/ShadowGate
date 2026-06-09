@@ -19,6 +19,11 @@
         <h1>ShadowGate</h1>
       </div>
       <div class="header-actions">
+        <select id="themeSelect" class="theme-select" onchange="setThemeMode(this.value)" aria-label="Theme">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
         <span id="uptime" class="uptime">--</span>
       </div>
     </header>
@@ -37,6 +42,16 @@
         </div>
       </div>
       <div class="device-name" id="deviceName">No device connected</div>
+      <div class="status-grid">
+        <div>
+          <span class="metric-label">Trusted</span>
+          <strong id="trustedCount">0</strong>
+        </div>
+        <div>
+          <span class="metric-label">Credential</span>
+          <strong id="credentialState">--</strong>
+        </div>
+      </div>
     </div>
 
     <!-- Action Button -->
@@ -56,6 +71,13 @@
     <div class="tab-content">
       <!-- Devices Tab -->
       <section class="tab-panel active" id="panel-devices">
+        <div class="pairing-box">
+          <div class="pairing-head">
+            <span>PC Pairing Payload</span>
+            <button class="btn-text" onclick="beginPairing()">Generate</button>
+          </div>
+          <textarea id="pairingPayload" readonly placeholder="Generate a pairing payload, then scan or copy it on Android."></textarea>
+        </div>
         <div class="device-list" id="deviceList">
           <div class="empty-state">
             <p>No trusted devices</p>
@@ -63,12 +85,19 @@
           </div>
         </div>
         <button class="btn-secondary" onclick="pairDevice()">
-          <span class="btn-icon">+</span> Pair New Device
+          <span class="btn-icon">+</span> Finish Pairing
         </button>
       </section>
 
       <!-- Config Tab -->
       <section class="tab-panel" id="panel-config">
+        <div class="config-group">
+          <label class="config-label">
+            Service UUID
+            <span class="config-value">BLE</span>
+          </label>
+          <input type="text" class="config-input" id="cfgServiceUuid" />
+        </div>
         <div class="config-group">
           <label class="config-label">
             Unlock Threshold (dBm)

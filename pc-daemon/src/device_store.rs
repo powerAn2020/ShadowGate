@@ -123,6 +123,18 @@ impl DeviceStore {
         Ok(())
     }
 
+    /// 添加信任设备 (hex 字符串输入，用于 IPC/配置 UI)
+    pub fn add_device_hex(
+        &mut self,
+        device_hash_hex: &str,
+        name: String,
+        public_key_hex: &str,
+    ) -> Result<()> {
+        let device_hash = hex_to_fixed::<8>(device_hash_hex).context("Invalid device hash hex")?;
+        let public_key = hex_to_fixed::<32>(public_key_hex).context("Invalid public key hex")?;
+        self.add_device(device_hash, name, public_key)
+    }
+
     /// 移除信任设备
     pub fn remove_device(&mut self, device_hash: &[u8; 8]) -> Result<()> {
         let hash_hex = bytes_to_hex(device_hash);
@@ -135,6 +147,12 @@ impl DeviceStore {
         } else {
             anyhow::bail!("Device not found: {}", hash_hex);
         }
+    }
+
+    /// 移除信任设备 (hex 字符串输入，用于 IPC/配置 UI)
+    pub fn remove_device_hex(&mut self, device_hash_hex: &str) -> Result<()> {
+        let device_hash = hex_to_fixed::<8>(device_hash_hex).context("Invalid device hash hex")?;
+        self.remove_device(&device_hash)
     }
 
     /// 通过哈希查找设备公钥
@@ -194,6 +212,14 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
 }
 
 fn hex_to_bytes(hex: &str) -> Result<[u8; 32]> {
+    hex_to_fixed::<32>(hex)
+}
+
+fn hex_to_fixed<const N: usize>(hex: &str) -> Result<[u8; N]> {
+    if hex.len() != N * 2 {
+        anyhow::bail!("Expected {} hex chars", N * 2);
+    }
+
     let bytes: Vec<u8> = (0..hex.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&hex[i..i + 2], 16))
@@ -203,5 +229,5 @@ fn hex_to_bytes(hex: &str) -> Result<[u8; 32]> {
     bytes
         .as_slice()
         .try_into()
-        .map_err(|_| anyhow::anyhow!("Expected 32 bytes"))
+        .map_err(|_| anyhow::anyhow!("Expected {} bytes", N))
 }

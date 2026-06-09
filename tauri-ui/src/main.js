@@ -16,11 +16,11 @@ function tauriInvoke(cmd, args = {}) {
 function mockResponse(cmd) {
   switch (cmd) {
     case 'get_status':
-      return { state: 'SCANNING', rssi: -52.5, device_name: 'Pixel 7 Pro', uptime_seconds: 120, daemon_available: false };
+      return { state: 'SCANNING', rssi: -52.5, device_name: 'Pixel 7 Pro', uptime_seconds: 120, daemon_available: false, trusted_device_count: 1, credential_ready: false };
     case 'get_devices':
       return [{ name: 'Pixel 7 Pro', hash: 'a1b2c3d4e5f6a7b8', paired_at: '2026-06-08T12:00:00Z', last_auth: '2026-06-08T12:05:00Z' }];
     case 'get_config':
-      return { unlock_threshold: -60, lock_threshold: -80, scan_interval_ms: 1000, challenge_timeout_ms: 1500, lock_confirmation_ms: 5000 };
+      return { service_uuid: '7f4d0001-7d6a-4f8f-9a7d-4f1f68b0f001', unlock_threshold: -60, lock_threshold: -80, scan_interval_ms: 1000, challenge_timeout_ms: 1500, lock_confirmation_ms: 5000, unlock_method: 'credential_provider' };
     case 'get_logs':
       return ['[12:00:01] ShadowGate daemon started', '[12:00:02] BLE adapter initialized (Intel AX210)', '[12:00:03] Loaded 1 trusted device(s)', '[12:00:05] BLE scan started (filter: 7f4d0001...)'];
     case 'toggle_daemon':
@@ -31,6 +31,8 @@ function mockResponse(cmd) {
       return 'Device unpaired';
     case 'update_config':
       return 'Config updated';
+    case 'begin_pairing':
+      return JSON.stringify({ protocol_version: 1, service_uuid: '7f4d0001-7d6a-4f8f-9a7d-4f1f68b0f001', pc_public_key_hex: '00'.repeat(32), pairing_nonce: '11'.repeat(16) }, null, 2);
     default:
       return null;
   }
@@ -42,6 +44,7 @@ let refreshInterval = null;
 
 // ===== DOM Ready =====
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   initTabs();
   loadStatus();
   loadDevices();
@@ -84,6 +87,8 @@ function updateStatusUI(status) {
   const rssiFill = document.getElementById('rssiFill');
   const deviceName = document.getElementById('deviceName');
   const uptimeEl = document.getElementById('uptime');
+  const trustedCount = document.getElementById('trustedCount');
+  const credentialState = document.getElementById('credentialState');
 
   // Status dot
   dot.className = 'status-dot';
@@ -96,6 +101,8 @@ function updateStatusUI(status) {
   }
 
   text.textContent = status.state || 'IDLE';
+  trustedCount.textContent = status.trusted_device_count ?? 0;
+  credentialState.textContent = status.credential_ready ? 'Ready' : 'Pending';
 
   // RSSI
   if (status.rssi != null) {
@@ -111,7 +118,7 @@ function updateStatusUI(status) {
   if (status.device_name) {
     deviceName.textContent = status.device_name;
   } else if (status.daemon_available === false && isTauriRuntime) {
-    deviceName.textContent = 'Local configuration mode - daemon IPC pending';
+    deviceName.textContent = 'Daemon offline';
   } else if (!isTauriRuntime) {
     deviceName.textContent = 'Browser preview mode';
   } else {
@@ -189,7 +196,7 @@ function renderDevices(devices) {
 }
 
 async function pairDevice() {
-  const qrContent = prompt('Enter QR code content or paste public key:');
+  const qrContent = prompt('Paste Android pairing JSON (device_hash, public_key_hex, name):');
   if (!qrContent) return;
 
   try {
@@ -222,6 +229,7 @@ async function unpairDevice(hash) {
 async function loadConfig() {
   try {
     const config = await tauriInvoke('get_config');
+    document.getElementById('cfgServiceUuid').value = config.service_uuid;
     document.getElementById('cfgUnlock').value = config.unlock_threshold;
     document.getElementById('cfgLock').value = config.lock_threshold;
     document.getElementById('cfgScan').value = config.scan_interval_ms;
@@ -245,11 +253,13 @@ function updateSliderLabel(sliderId, labelId, unit) {
 
 async function saveConfig() {
   const config = {
+    service_uuid: document.getElementById('cfgServiceUuid').value,
     unlock_threshold: parseInt(document.getElementById('cfgUnlock').value),
     lock_threshold: parseInt(document.getElementById('cfgLock').value),
     scan_interval_ms: parseInt(document.getElementById('cfgScan').value),
     challenge_timeout_ms: parseInt(document.getElementById('cfgTimeout').value),
     lock_confirmation_ms: parseInt(document.getElementById('cfgConfirm').value),
+    unlock_method: 'credential_provider',
   };
 
   try {
@@ -259,6 +269,17 @@ async function saveConfig() {
   } catch (e) {
     console.error('Failed to save config:', e);
     alert('Failed to save configuration: ' + e);
+  }
+}
+
+async function beginPairing() {
+  try {
+    const payload = await tauriInvoke('begin_pairing');
+    document.getElementById('pairingPayload').value = payload;
+    showToast('Pairing payload generated');
+  } catch (e) {
+    console.error('Failed to begin pairing:', e);
+    showToast('Failed to generate pairing payload');
   }
 }
 
@@ -313,6 +334,31 @@ function showToast(message) {
     toast.style.transition = 'opacity 0.3s';
     setTimeout(() => toast.remove(), 300);
   }, 2000);
+}
+
+function initTheme() {
+  const mode = localStorage.getItem('shadowgate-theme') || 'system';
+  const select = document.getElementById('themeSelect');
+  if (select) select.value = mode;
+  applyThemeMode(mode);
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if ((localStorage.getItem('shadowgate-theme') || 'system') === 'system') {
+      applyThemeMode('system');
+    }
+  });
+}
+
+function setThemeMode(mode) {
+  localStorage.setItem('shadowgate-theme', mode);
+  applyThemeMode(mode);
+}
+
+function applyThemeMode(mode) {
+  const resolved = mode === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : mode;
+  document.documentElement.dataset.theme = resolved;
 }
 
 // Add fadeInUp animation
