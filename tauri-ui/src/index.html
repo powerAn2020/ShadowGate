@@ -19,7 +19,7 @@
         <h1>ShadowGate</h1>
       </div>
       <div class="header-actions">
-        <select id="themeSelect" class="theme-select" onchange="setThemeMode(this.value)" aria-label="Theme">
+        <select id="themeSelect" class="theme-select" aria-label="Theme">
           <option value="system">System</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
@@ -55,7 +55,7 @@
     </div>
 
     <!-- Action Button -->
-    <button class="btn-primary" id="toggleBtn" onclick="toggleDaemon()">
+    <button class="btn-primary" id="toggleBtn">
       <span class="btn-icon">&#9654;</span>
       <span>Start Daemon</span>
     </button>
@@ -74,7 +74,7 @@
         <div class="pairing-box">
           <div class="pairing-head">
             <span>PC Pairing Payload</span>
-            <button class="btn-text" onclick="beginPairing()">Generate</button>
+            <button class="btn-text" id="beginPairingBtn">Generate</button>
           </div>
           <textarea id="pairingPayload" readonly placeholder="Generate a pairing payload, then scan or copy it on Android."></textarea>
         </div>
@@ -84,7 +84,7 @@
             <p class="sub">Scan a QR code from your Android device to pair</p>
           </div>
         </div>
-        <button class="btn-secondary" onclick="pairDevice()">
+        <button class="btn-secondary" id="finishPairingBtn">
           <span class="btn-icon">+</span> Finish Pairing
         </button>
       </section>
@@ -103,42 +103,37 @@
             Unlock Threshold (dBm)
             <span class="config-value" id="cfgUnlockVal">-60</span>
           </label>
-          <input type="range" class="config-slider" id="cfgUnlock" min="-90" max="-30" value="-60" step="1"
-            oninput="updateSliderLabel('cfgUnlock', 'cfgUnlockVal', 'dBm')" />
+          <input type="range" class="config-slider" id="cfgUnlock" min="-90" max="-30" value="-60" step="1" />
         </div>
         <div class="config-group">
           <label class="config-label">
             Lock Threshold (dBm)
             <span class="config-value" id="cfgLockVal">-80</span>
           </label>
-          <input type="range" class="config-slider" id="cfgLock" min="-100" max="-40" value="-80" step="1"
-            oninput="updateSliderLabel('cfgLock', 'cfgLockVal', 'dBm')" />
+          <input type="range" class="config-slider" id="cfgLock" min="-100" max="-40" value="-80" step="1" />
         </div>
         <div class="config-group">
           <label class="config-label">
             Scan Interval (ms)
             <span class="config-value" id="cfgScanVal">1000</span>
           </label>
-          <input type="range" class="config-slider" id="cfgScan" min="200" max="5000" value="1000" step="100"
-            oninput="updateSliderLabel('cfgScan', 'cfgScanVal', 'ms')" />
+          <input type="range" class="config-slider" id="cfgScan" min="200" max="5000" value="1000" step="100" />
         </div>
         <div class="config-group">
           <label class="config-label">
             Challenge Timeout (ms)
             <span class="config-value" id="cfgTimeoutVal">1500</span>
           </label>
-          <input type="range" class="config-slider" id="cfgTimeout" min="500" max="5000" value="1500" step="100"
-            oninput="updateSliderLabel('cfgTimeout', 'cfgTimeoutVal', 'ms')" />
+          <input type="range" class="config-slider" id="cfgTimeout" min="500" max="5000" value="1500" step="100" />
         </div>
         <div class="config-group">
           <label class="config-label">
             Lock Confirmation (ms)
             <span class="config-value" id="cfgConfirmVal">5000</span>
           </label>
-          <input type="range" class="config-slider" id="cfgConfirm" min="1000" max="15000" value="5000" step="500"
-            oninput="updateSliderLabel('cfgConfirm', 'cfgConfirmVal', 'ms')" />
+          <input type="range" class="config-slider" id="cfgConfirm" min="1000" max="15000" value="5000" step="500" />
         </div>
-        <button class="btn-secondary" onclick="saveConfig()">Save Configuration</button>
+        <button class="btn-secondary" id="saveConfigBtn">Save Configuration</button>
         <div class="credential-box">
           <div class="credential-head">
             <span>Credential Provider</span>
@@ -147,7 +142,7 @@
           <input type="text" class="config-input" id="credDomain" autocomplete="organization" placeholder="Domain (optional)" />
           <input type="text" class="config-input" id="credUsername" autocomplete="username" placeholder="Windows username" />
           <input type="password" class="config-input" id="credPassword" autocomplete="current-password" placeholder="Windows password" />
-          <button class="btn-secondary" onclick="saveWindowsCredential()">Save Windows Credential</button>
+          <button class="btn-secondary" id="saveWindowsCredentialBtn">Save Windows Credential</button>
         </div>
       </section>
 
@@ -156,7 +151,7 @@
         <div class="log-viewer" id="logViewer">
           <div class="log-entry">[--:--:--] Waiting for daemon...</div>
         </div>
-        <button class="btn-text" onclick="refreshLogs()">Refresh</button>
+        <button class="btn-text" id="refreshLogsBtn">Refresh</button>
       </section>
     </div>
 

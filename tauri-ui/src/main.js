@@ -50,12 +50,50 @@ let refreshInterval = null;
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initTabs();
+  bindControls();
   loadStatus();
   loadDevices();
   loadConfig();
   loadWindowsCredentialStatus();
   startAutoRefresh();
 });
+
+function bindControls() {
+  bindClick('toggleBtn', toggleDaemon);
+  bindClick('beginPairingBtn', beginPairing);
+  bindClick('finishPairingBtn', pairDevice);
+  bindClick('saveConfigBtn', saveConfig);
+  bindClick('saveWindowsCredentialBtn', saveWindowsCredential);
+  bindClick('refreshLogsBtn', refreshLogs);
+
+  const themeSelect = document.getElementById('themeSelect');
+  themeSelect?.addEventListener('change', event => setThemeMode(event.target.value));
+
+  [
+    ['cfgUnlock', 'cfgUnlockVal', 'dBm'],
+    ['cfgLock', 'cfgLockVal', 'dBm'],
+    ['cfgScan', 'cfgScanVal', 'ms'],
+    ['cfgTimeout', 'cfgTimeoutVal', 'ms'],
+    ['cfgConfirm', 'cfgConfirmVal', 'ms'],
+  ].forEach(([sliderId, labelId, unit]) => {
+    document
+      .getElementById(sliderId)
+      ?.addEventListener('input', () => updateSliderLabel(sliderId, labelId, unit));
+  });
+
+  document.getElementById('deviceList')?.addEventListener('click', event => {
+    const removeButton = event.target.closest('[data-unpair-hash]');
+    if (!removeButton) return;
+    unpairDevice(removeButton.dataset.unpairHash);
+  });
+}
+
+function bindClick(id, handler) {
+  document.getElementById(id)?.addEventListener('click', event => {
+    event.preventDefault();
+    handler();
+  });
+}
 
 // ===== Tab Navigation =====
 function initTabs() {
@@ -196,7 +234,7 @@ function renderDevices(devices) {
         <span class="device-item-hash">${escapeHtml(d.hash).substring(0, 16)}...</span>
         <span class="device-item-meta">Paired ${formatTimestamp(d.paired_at)}</span>
       </div>
-      <button class="device-item-remove" onclick="unpairDevice('${escapeHtml(d.hash)}')">Remove</button>
+      <button class="device-item-remove" data-unpair-hash="${escapeHtml(d.hash)}">Remove</button>
     </div>
   `).join('');
 }
@@ -384,11 +422,17 @@ function initTheme() {
   if (select) select.value = mode;
   applyThemeMode(mode);
 
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  const colorScheme = window.matchMedia('(prefers-color-scheme: dark)');
+  const onSystemThemeChange = () => {
     if ((localStorage.getItem('shadowgate-theme') || 'system') === 'system') {
       applyThemeMode('system');
     }
-  });
+  };
+  if (colorScheme.addEventListener) {
+    colorScheme.addEventListener('change', onSystemThemeChange);
+  } else if (colorScheme.addListener) {
+    colorScheme.addListener(onSystemThemeChange);
+  }
 }
 
 function setThemeMode(mode) {
@@ -402,6 +446,16 @@ function applyThemeMode(mode) {
     : mode;
   document.documentElement.dataset.theme = resolved;
 }
+
+window.ShadowGateControls = {
+  beginPairing,
+  pairDevice,
+  refreshLogs,
+  saveConfig,
+  saveWindowsCredential,
+  setThemeMode,
+  toggleDaemon,
+};
 
 // Add fadeInUp animation
 const style = document.createElement('style');
