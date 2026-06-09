@@ -286,6 +286,12 @@ body {
   font-family: 'Consolas', 'Courier New', monospace;
 }
 
+.device-item-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.75;
+}
+
 .device-item-remove {
   background: transparent;
   border: 1px solid var(--danger);

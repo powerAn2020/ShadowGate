@@ -2,6 +2,7 @@
 
 // ===== Tauri IPC Wrapper =====
 const invoke = window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+const isTauriRuntime = Boolean(invoke);
 
 // Fallback for development without Tauri
 function tauriInvoke(cmd, args = {}) {
@@ -15,7 +16,7 @@ function tauriInvoke(cmd, args = {}) {
 function mockResponse(cmd) {
   switch (cmd) {
     case 'get_status':
-      return { state: 'SCANNING', rssi: -52.5, device_name: 'Pixel 7 Pro', uptime_seconds: 120 };
+      return { state: 'SCANNING', rssi: -52.5, device_name: 'Pixel 7 Pro', uptime_seconds: 120, daemon_available: false };
     case 'get_devices':
       return [{ name: 'Pixel 7 Pro', hash: 'a1b2c3d4e5f6a7b8', paired_at: '2026-06-08T12:00:00Z', last_auth: '2026-06-08T12:05:00Z' }];
     case 'get_config':
@@ -43,6 +44,7 @@ let refreshInterval = null;
 document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   loadStatus();
+  loadDevices();
   loadConfig();
   startAutoRefresh();
 });
@@ -105,8 +107,16 @@ function updateStatusUI(status) {
     rssiFill.style.width = '0%';
   }
 
-  // Device name
-  deviceName.textContent = status.device_name || 'No device connected';
+  // Device / backend status
+  if (status.device_name) {
+    deviceName.textContent = status.device_name;
+  } else if (status.daemon_available === false && isTauriRuntime) {
+    deviceName.textContent = 'Local configuration mode - daemon IPC pending';
+  } else if (!isTauriRuntime) {
+    deviceName.textContent = 'Browser preview mode';
+  } else {
+    deviceName.textContent = 'No device connected';
+  }
 
   // Uptime
   const uptime = status.uptime_seconds || 0;
@@ -121,8 +131,10 @@ async function toggleDaemon() {
     daemonActive = await tauriInvoke('toggle_daemon');
     updateToggleButton();
     loadStatus();
+    refreshLogs();
   } catch (e) {
     console.error('Failed to toggle daemon:', e);
+    showToast('Failed to toggle daemon');
   }
 }
 
@@ -169,6 +181,7 @@ function renderDevices(devices) {
       <div class="device-item-info">
         <span class="device-item-name">${escapeHtml(d.name)}</span>
         <span class="device-item-hash">${escapeHtml(d.hash).substring(0, 16)}...</span>
+        <span class="device-item-meta">Paired ${formatTimestamp(d.paired_at)}</span>
       </div>
       <button class="device-item-remove" onclick="unpairDevice('${escapeHtml(d.hash)}')">Remove</button>
     </div>
@@ -182,7 +195,9 @@ async function pairDevice() {
   try {
     const result = await tauriInvoke('pair_device', { qrContent });
     console.log('Pair result:', result);
+    showToast(result);
     loadDevices();
+    refreshLogs();
   } catch (e) {
     console.error('Failed to pair device:', e);
     alert('Failed to pair device: ' + e);
@@ -194,9 +209,12 @@ async function unpairDevice(hash) {
 
   try {
     await tauriInvoke('unpair_device', { hash });
+    showToast('Device removed');
     loadDevices();
+    refreshLogs();
   } catch (e) {
     console.error('Failed to unpair device:', e);
+    showToast('Failed to remove device');
   }
 }
 
@@ -237,9 +255,10 @@ async function saveConfig() {
   try {
     await tauriInvoke('update_config', { configJson: JSON.stringify(config) });
     showToast('Configuration saved');
+    refreshLogs();
   } catch (e) {
     console.error('Failed to save config:', e);
-    alert('Failed to save configuration');
+    alert('Failed to save configuration: ' + e);
   }
 }
 
@@ -309,6 +328,14 @@ document.head.appendChild(style);
 // ===== Utilities =====
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = str ?? '';
   return div.innerHTML;
+}
+
+function formatTimestamp(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return '--';
+  }
+  return new Date(numeric * 1000).toLocaleString();
 }
